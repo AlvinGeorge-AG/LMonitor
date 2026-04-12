@@ -1,0 +1,2 @@
+5fcfde25c26ad68800bff71b66d924c7b15898362ac2fcf945f8183d044d68aa  dist/lmonitor-v0.1.0-linux-amd64
+ffffa8ded10c5322afc48c98930432fbf2ebaf1a8dd6aef763ebb78c52b47128  dist/lmonitor-v0.1.0-linux-arm64
