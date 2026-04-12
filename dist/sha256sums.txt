@@ -1,2 +1,3 @@
-5fcfde25c26ad68800bff71b66d924c7b15898362ac2fcf945f8183d044d68aa  dist/lmonitor-v0.1.0-linux-amd64
-ffffa8ded10c5322afc48c98930432fbf2ebaf1a8dd6aef763ebb78c52b47128  dist/lmonitor-v0.1.0-linux-arm64
+80c479e6f19b14f14845ecdd9f1425d5f5f27d289f99b3df7e05c4d096d2dab7  dist/lmonitor-v0.2.0-linux-amd64
+444988bbf75deebd877c5277403d7e10f35239e04161e5a8c56bd0c1009a0625  dist/lmonitor-v0.2.0-linux-arm64
+2df901e898b757feef653683e099c2993e7782545f1e6c38b17837fd48306e6b  dist/lmonitor-v0.2.0-windows-amd64.exe

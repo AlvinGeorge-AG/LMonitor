@@ -1,11 +1,12 @@
 # LMonitor
 
-LMonitor is a lightweight Linux system monitor with a live web dashboard.
-It samples core host metrics from `/proc`, pushes updates over WebSocket, and renders interactive charts in the browser.
+LMonitor is a lightweight host system monitor with a live web dashboard.
+It samples core host metrics with platform-specific collectors, pushes updates over WebSocket, and renders interactive charts in the browser.
 
 ## Features
 
 - Live metrics stream (WebSocket)
+- Linux and Windows support
 - CPU and I/O wait
 - Per-core CPU usage
 - Memory usage (RAM, swap, cached, buffers)
@@ -19,7 +20,7 @@ It samples core host metrics from `/proc`, pushes updates over WebSocket, and re
 
 ## Requirements
 
-- Linux host (metrics are read from `/proc`)
+- Linux or Windows host
 - Go 1.22+
 - Modern browser (Chrome, Firefox, Edge)
 
@@ -31,10 +32,22 @@ It samples core host metrics from `/proc`, pushes updates over WebSocket, and re
 go build -o lmonitor ./cmd/lmonitor
 ```
 
+On Windows:
+
+```powershell
+go build -o lmonitor.exe ./cmd/lmonitor
+```
+
 ### 2. Run dashboard mode
 
 ```bash
 ./lmonitor
+```
+
+On Windows:
+
+```powershell
+.\lmonitor.exe
 ```
 
 Open:
@@ -45,6 +58,12 @@ Open:
 
 ```bash
 ./lmonitor -print
+```
+
+On Windows:
+
+```powershell
+.\lmonitor.exe -print
 ```
 
 ## Runtime Flags
@@ -68,7 +87,7 @@ Examples:
 ```text
 cmd/lmonitor/main.go          App entrypoint, HTTP server, embedded web assets
 cmd/lmonitor/web/             Embedded dashboard assets actually served by the binary
-internal/metrics/             Linux metric collectors and parsers
+internal/metrics/             Platform-specific metric collectors and parsers
 internal/server/server.go     Metrics WebSocket hub and poll loop
 internal/server/logs.go       Log WebSocket hub for dashboard log panel
 web/                          Extra web copy (not embedded by current binary)
@@ -76,10 +95,40 @@ web/                          Extra web copy (not embedded by current binary)
 
 ## How It Works
 
-1. `internal/metrics.Collector` reads and parses Linux proc files.
-2. `RunPoller` samples on each interval and broadcasts JSON samples to `/ws`.
-3. Browser dashboard subscribes to `/ws` and updates charts in real time.
-4. App logs are mirrored to `/logs`, consumed by the dashboard log panel.
+1. `internal/metrics.Collector` uses the host-specific backend for metric collection.
+2. Linux reads directly from `/proc`; Windows uses platform APIs through `gopsutil`.
+3. `RunPoller` samples on each interval and broadcasts JSON samples to `/ws`.
+4. Browser dashboard subscribes to `/ws` and updates charts in real time.
+5. App logs are mirrored to `/logs`, consumed by the dashboard log panel.
+
+## Platform Support
+
+LMonitor now supports Linux and Windows with the same dashboard and WebSocket payload format.
+
+Linux:
+- Full support for the current metric set using `/proc` and `statfs`
+
+Windows:
+- CPU, per-core CPU, RAM, swap, load, uptime, network, disk throughput, root drive usage, and total process count are supported
+- `ProcsRun` is currently Linux-specific and may remain `0`
+- Some metrics are best-effort depending on what Windows exposes on the host
+
+Other platforms:
+- The binary builds can fail cleanly at runtime with an unsupported-platform message until a collector is added
+
+## Releases
+
+Current release:
+- `v0.2.0`
+
+Release artifacts:
+- `dist/lmonitor-v0.2.0-linux-amd64`
+- `dist/lmonitor-v0.2.0-linux-arm64`
+- `dist/lmonitor-v0.2.0-windows-amd64.exe`
+
+Release notes:
+- [CHANGELOG.md](CHANGELOG.md)
+- [docs/releases/v0.2.0.md](docs/releases/v0.2.0.md)
 
 ## Logging Behavior
 
@@ -104,13 +153,19 @@ pkill -f lmonitor
 Run tests:
 
 ```bash
-go test ./...
+env GOCACHE=/tmp/lmonitor-gocache go test ./...
 ```
 
 Format code:
 
 ```bash
 gofmt -w ./cmd ./internal
+```
+
+Cross-build for Windows:
+
+```bash
+env GOCACHE=/tmp/lmonitor-gocache GOOS=windows GOARCH=amd64 go build ./cmd/lmonitor
 ```
 
 ## Troubleshooting
@@ -140,4 +195,5 @@ Then open the new URL in your browser.
 ## Notes
 
 - Sampling and parsing logic has tests under `internal/metrics`.
-- The app is currently focused on Linux proc/stat sources.
+- Linux and Windows share the same server and dashboard layers.
+- Linux uses `/proc`; Windows uses a dedicated collector backend.
