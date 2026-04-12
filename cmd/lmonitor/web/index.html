@@ -12,34 +12,135 @@
       <span class="logo">LMonitor</span>
       <span class="sub">local system metrics</span>
     </div>
+    <div class="topbar-mid" id="sys-strip" aria-live="polite">
+      <span class="pill"><span class="pill-k">Uptime</span> <span id="val-uptime">—</span></span>
+      <span class="pill"><span class="pill-k">CPUs</span> <span id="val-ncpu">—</span></span>
+      <span class="pill"><span class="pill-k">Tasks</span> <span id="val-procs">—</span></span>
+      <span class="pill"><span class="pill-k">Load</span> <span id="val-loadpct">—</span></span>
+    </div>
     <div id="status" class="status status-offline" role="status">Reconnecting…</div>
   </header>
 
   <main class="grid">
-    <section class="panel">
-      <h2>CPU</h2>
-      <div class="canvas-wrap"><canvas id="c-cpu" aria-label="CPU usage"></canvas></div>
+    <section class="panel" data-panel="cpu">
+      <div class="panel-head">
+        <div class="panel-title-block">
+          <h2>CPU &amp; I/O wait</h2>
+          <p class="panel-pct-line" id="pct-cpu-line"></p>
+        </div>
+        <div class="panel-tools">
+          <select class="chart-type" data-panel="cpu" title="Chart type" aria-label="CPU chart type"></select>
+          <label class="chk"><input type="checkbox" class="opt-pct" data-panel="cpu" /> Big %</label>
+        </div>
+      </div>
+      <div class="panel-pct-big" id="pct-cpu-big" hidden></div>
+      <div class="canvas-wrap"><canvas id="c-cpu"></canvas></div>
     </section>
-    <section class="panel">
-      <h2>Memory</h2>
-      <div class="canvas-wrap"><canvas id="c-mem" aria-label="Memory usage"></canvas></div>
+
+    <section class="panel" data-panel="mem">
+      <div class="panel-head">
+        <div class="panel-title-block">
+          <h2>Memory</h2>
+          <p class="panel-pct-line" id="pct-mem-line"></p>
+        </div>
+        <div class="panel-tools">
+          <select class="chart-type" data-panel="mem" title="Chart type" aria-label="Memory chart type"></select>
+          <label class="chk"><input type="checkbox" class="opt-pct" data-panel="mem" /> Big %</label>
+        </div>
+      </div>
+      <div class="panel-pct-big" id="pct-mem-big" hidden></div>
+      <div class="canvas-wrap"><canvas id="c-mem"></canvas></div>
     </section>
-    <section class="panel">
-      <h2>Load average</h2>
-      <div class="canvas-wrap"><canvas id="c-load" aria-label="Load average"></canvas></div>
+
+    <section class="panel" data-panel="load">
+      <div class="panel-head">
+        <div class="panel-title-block">
+          <h2>Load average</h2>
+          <p class="panel-pct-line" id="pct-load-line"></p>
+        </div>
+        <div class="panel-tools">
+          <select class="chart-type" data-panel="load" title="Chart type" aria-label="Load chart type"></select>
+          <label class="chk"><input type="checkbox" class="opt-pct" data-panel="load" /> Big %</label>
+        </div>
+      </div>
+      <div class="panel-pct-big" id="pct-load-big" hidden></div>
+      <div class="canvas-wrap"><canvas id="c-load"></canvas></div>
     </section>
-    <section class="panel">
-      <h2>Network</h2>
-      <div class="canvas-wrap"><canvas id="c-net" aria-label="Network throughput"></canvas></div>
+
+    <section class="panel" data-panel="net">
+      <div class="panel-head">
+        <div class="panel-title-block">
+          <h2>Network</h2>
+          <p class="panel-pct-line" id="pct-net-line"></p>
+        </div>
+        <div class="panel-tools">
+          <select class="chart-type" data-panel="net" title="Chart type" aria-label="Network chart type"></select>
+          <label class="chk"><input type="checkbox" class="opt-pct" data-panel="net" /> Big %</label>
+        </div>
+      </div>
+      <div class="panel-pct-big" id="pct-net-big" hidden></div>
+      <div class="canvas-wrap"><canvas id="c-net"></canvas></div>
     </section>
-    <section class="panel">
-      <h2>Disk I/O</h2>
-      <div class="canvas-wrap"><canvas id="c-disk" aria-label="Disk throughput"></canvas></div>
+
+    <section class="panel" data-panel="disk">
+      <div class="panel-head">
+        <div class="panel-title-block">
+          <h2>Disk I/O</h2>
+          <p class="panel-pct-line" id="pct-disk-line"></p>
+        </div>
+        <div class="panel-tools">
+          <select class="chart-type" data-panel="disk" title="Chart type" aria-label="Disk chart type"></select>
+          <label class="chk"><input type="checkbox" class="opt-pct" data-panel="disk" /> Big %</label>
+        </div>
+      </div>
+      <div class="panel-pct-big" id="pct-disk-big" hidden></div>
+      <div class="canvas-wrap"><canvas id="c-disk"></canvas></div>
     </section>
-    <section class="panel panel-donut">
-      <h2>Root filesystem</h2>
+
+    <section class="panel" data-panel="cores">
+      <div class="panel-head">
+        <div class="panel-title-block">
+          <h2>Per-core CPU</h2>
+          <p class="panel-pct-line" id="pct-cores-line"></p>
+        </div>
+        <div class="panel-tools">
+          <select class="chart-type" data-panel="cores" title="Chart type" aria-label="Per-core chart type"></select>
+          <label class="chk"><input type="checkbox" class="opt-pct" data-panel="cores" /> Big %</label>
+        </div>
+      </div>
+      <div class="panel-pct-big" id="pct-cores-big" hidden></div>
+      <div class="canvas-wrap"><canvas id="c-cores"></canvas></div>
+    </section>
+
+    <section class="panel" data-panel="procs">
+      <div class="panel-head">
+        <div class="panel-title-block">
+          <h2>Running tasks</h2>
+          <p class="panel-pct-line" id="pct-procs-line"></p>
+        </div>
+        <div class="panel-tools">
+          <select class="chart-type" data-panel="procs" title="Chart type" aria-label="Tasks chart type"></select>
+          <label class="chk"><input type="checkbox" class="opt-pct" data-panel="procs" /> Big #</label>
+        </div>
+      </div>
+      <div class="panel-pct-big" id="pct-procs-big" hidden></div>
+      <div class="canvas-wrap"><canvas id="c-procs"></canvas></div>
+    </section>
+
+    <section class="panel panel-donut" data-panel="root">
+      <div class="panel-head">
+        <div class="panel-title-block">
+          <h2>Root filesystem</h2>
+          <p class="panel-pct-line" id="pct-root-line"></p>
+        </div>
+        <div class="panel-tools">
+          <select class="chart-type" data-panel="root" title="Chart type" aria-label="Root chart type"></select>
+          <label class="chk"><input type="checkbox" class="opt-pct" data-panel="root" /> Big %</label>
+        </div>
+      </div>
+      <div class="panel-pct-big" id="pct-root-big" hidden></div>
       <div class="donut-wrap">
-        <div class="canvas-wrap donut"><canvas id="c-root" aria-label="Root disk used"></canvas></div>
+        <div class="canvas-wrap donut"><canvas id="c-root"></canvas></div>
         <div id="root-pct" class="root-pct">—</div>
       </div>
     </section>

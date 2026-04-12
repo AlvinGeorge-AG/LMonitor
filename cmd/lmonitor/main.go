@@ -31,8 +31,8 @@ func main() {
 			if err != nil {
 				log.Fatal(err)
 			}
-			fmt.Printf("cpu=%.1f%% ram=%.1f%% swap=%.1f%% load=%.2f/%.2f/%.2f net_rx=%.0f net_tx=%.0f dsk_rd=%.0f dsk_wr=%.0f root=%.1f%%\n",
-				s.CPU, s.RAM, s.Swap, s.Load1, s.Load5, s.Load15, s.NetRx, s.NetTx, s.DskRd, s.DskWr, s.RootPct)
+			fmt.Printf("cpu=%.1f%% iow=%.1f%% ram=%.1f%% swap=%.1f%% cache=%.1f%% buf=%.1f%% load=%.2f/%.2f/%.2f load%%=%.1f procs=%d/%d up=%.0fs net_rx=%.0f net_tx=%.0f dsk_rd=%.0f dsk_wr=%.0f root=%.1f%% ncpu=%d\n",
+				s.CPU, s.IOWait, s.RAM, s.Swap, s.Cached, s.Buffers, s.Load1, s.Load5, s.Load15, s.Load1Pct, s.ProcsRun, s.ProcsTotal, s.Uptime, s.NetRx, s.NetTx, s.DskRd, s.DskWr, s.RootPct, s.NCPU)
 			time.Sleep(*interval)
 		}
 	}

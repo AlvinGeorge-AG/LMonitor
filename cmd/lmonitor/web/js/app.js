@@ -3,10 +3,26 @@
 (function () {
   "use strict";
 
-  const MAX_POINTS = 100;
+  const MAX_POINTS = 90;
+  const LS = "lmonitor.";
+
   const prefersReduceMotion =
     window.matchMedia &&
     window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  function getPref(key, def) {
+    try {
+      const v = localStorage.getItem(LS + key);
+      return v == null || v === "" ? def : v;
+    } catch (_) {
+      return def;
+    }
+  }
+  function setPref(key, val) {
+    try {
+      localStorage.setItem(LS + key, val);
+    } catch (_) {}
+  }
 
   Chart.defaults.color = "#8b949e";
   Chart.defaults.borderColor = "#30363d";
@@ -20,6 +36,16 @@
     return bps.toFixed(0) + " B/s";
   }
 
+  function formatUptime(sec) {
+    const s = Math.floor(sec);
+    const d = Math.floor(s / 86400);
+    const h = Math.floor((s % 86400) / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    if (d > 0) return d + "d " + h + "h";
+    if (h > 0) return h + "h " + m + "m";
+    return m + "m";
+  }
+
   function timeLabel(t) {
     const d = new Date(t);
     return d.toLocaleTimeString(undefined, {
@@ -30,79 +56,579 @@
     });
   }
 
-  function baseChartOptions(yTitle, tooltipFormatter) {
+  function coreColor(i, n) {
+    const step = 360 / Math.max(n, 1);
+    const h = Math.round((i * step) % 360);
+    return "hsl(" + h + ", 62%, 52%)";
+  }
+
+  function baseScales(yTitle) {
     return {
-      responsive: true,
-      maintainAspectRatio: false,
-      animation: prefersReduceMotion ? false : { duration: 0 },
-      interaction: { mode: "index", intersect: false },
-      plugins: {
-        legend: {
-          labels: { color: "#c9d1d9", boxWidth: 10, font: { size: 11 } },
-        },
-        tooltip: {
-          callbacks: tooltipFormatter || {},
-        },
+      x: {
+        ticks: { color: "#8b949e", maxTicksLimit: 6, maxRotation: 0 },
+        grid: { color: "#21262d" },
       },
-      scales: {
-        x: {
-          ticks: { color: "#8b949e", maxTicksLimit: 6, maxRotation: 0 },
-          grid: { color: "#21262d" },
-        },
-        y: {
-          title: yTitle
-            ? { display: true, text: yTitle, color: "#6e7681", font: { size: 10 } }
-            : undefined,
-          ticks: { color: "#8b949e" },
-          grid: { color: "#21262d" },
-        },
+      y: {
+        beginAtZero: true,
+        title: yTitle
+          ? { display: true, text: yTitle, color: "#6e7681", font: { size: 10 } }
+          : undefined,
+        ticks: { color: "#8b949e" },
+        grid: { color: "#21262d" },
       },
     };
   }
 
-  function createRollingChart(canvas, datasetsSpec, yTitle, tooltipCb) {
-    const labels = [];
-    const datasets = datasetsSpec.map(function (s) {
-      return {
-        label: s.label,
-        data: [],
-        borderColor: s.color,
-        backgroundColor: s.fill || "transparent",
-        fill: !!s.fill,
+  function RollingChart(canvas, panelKey, template, yTitle, tooltipCb, types) {
+    this.canvas = canvas;
+    this.panelKey = panelKey;
+    this.template = template;
+    this.yTitle = yTitle;
+    this.tooltipCb = tooltipCb || {};
+    this.types = types || ["line", "area", "bar"];
+    this.labels = [];
+    this.series = template.map(function () {
+      return [];
+    });
+    this.chart = null;
+    this.chartType = getPref("chart." + panelKey, "line");
+    if (this.types.indexOf(this.chartType) < 0) this.chartType = this.types[0];
+  }
+
+  RollingChart.prototype.mkDatasets = function () {
+    const self = this;
+    const isArea = this.chartType === "area";
+    const isBar = this.chartType === "bar";
+    return this.template.map(function (t, i) {
+      const base = {
+        label: t.label,
+        data: self.series[i].slice(),
+        borderColor: t.color,
+        borderWidth: isBar ? 1 : 1.5,
+      };
+      if (isBar) {
+        base.backgroundColor = t.color;
+        base.borderRadius = 4;
+      } else {
+        base.tension = 0.25;
+        base.pointRadius = 0;
+        base.fill = isArea || !!t.fill;
+        base.backgroundColor = isArea
+          ? t.colorDim || t.color.replace("hsl(", "hsla(").replace(")", ", 0.2)")
+          : t.fill || "transparent";
+      }
+      return base;
+    });
+  };
+
+  RollingChart.prototype.buildConfig = function () {
+    const isBar = this.chartType === "bar";
+    const type = isBar ? "bar" : "line";
+    const cfg = {
+      type: type,
+      data: { labels: this.labels.slice(), datasets: this.mkDatasets() },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: prefersReduceMotion ? false : { duration: isBar ? 280 : 0 },
+        interaction: { mode: "index", intersect: false },
+        plugins: {
+          legend: { labels: { color: "#c9d1d9", boxWidth: 10, font: { size: 10 } } },
+          tooltip: { callbacks: this.tooltipCb },
+        },
+        scales: baseScales(this.yTitle),
+      },
+    };
+    if (isBar) cfg.options.scales.x.ticks.maxRotation = 40;
+    return cfg;
+  };
+
+  RollingChart.prototype.rebuild = function () {
+    if (this.chart) {
+      this.chart.destroy();
+      this.chart = null;
+    }
+    if (this.labels.length === 0) {
+      const t = Date.now();
+      this.labels.push(timeLabel(t));
+      for (let i = 0; i < this.series.length; i++) this.series[i].push(0);
+    }
+    this.chart = new Chart(this.canvas.getContext("2d"), this.buildConfig());
+  };
+
+  RollingChart.prototype.setType = function (t) {
+    if (this.types.indexOf(t) < 0) return;
+    this.chartType = t;
+    setPref("chart." + this.panelKey, t);
+    this.rebuild();
+  };
+
+  RollingChart.prototype.pushRow = function (t, values) {
+    this.labels.push(timeLabel(t));
+    for (let i = 0; i < values.length; i++) {
+      if (this.series[i]) this.series[i].push(values[i]);
+    }
+    while (this.labels.length > MAX_POINTS) {
+      this.labels.shift();
+      for (let j = 0; j < this.series.length; j++) this.series[j].shift();
+    }
+    if (!this.chart) this.rebuild();
+    this.chart.data.labels = this.labels.slice();
+    for (let i = 0; i < values.length; i++) {
+      if (this.chart.data.datasets[i]) {
+        this.chart.data.datasets[i].data = this.series[i].slice();
+      }
+    }
+    this.chart.update("none");
+  };
+
+  function CoreChart(canvas, panelKey) {
+    this.canvas = canvas;
+    this.panelKey = panelKey;
+    this.chart = null;
+    this.types = ["line", "area", "bar", "radar"];
+    this.chartType = getPref("chart." + panelKey, "bar");
+    if (this.types.indexOf(this.chartType) < 0) this.chartType = "bar";
+    this.timeLabs = [];
+    this.perCore = [];
+    this.n = 0;
+  }
+
+  CoreChart.prototype.labelsForCores = function (n) {
+    const a = [];
+    for (let i = 0; i < n; i++) a.push("C" + i);
+    return a;
+  };
+
+  CoreChart.prototype.ensureBuckets = function (n) {
+    if (n === this.n && this.perCore.length === n) return;
+    this.n = n;
+    this.perCore = [];
+    for (let i = 0; i < n; i++) this.perCore.push([]);
+    this.timeLabs = [];
+    if (this.chart) {
+      this.chart.destroy();
+      this.chart = null;
+    }
+  };
+
+  CoreChart.prototype.setType = function (t) {
+    if (this.types.indexOf(t) < 0) return;
+    this.chartType = t;
+    setPref("chart." + this.panelKey, t);
+    if (this.chart) {
+      this.chart.destroy();
+      this.chart = null;
+    }
+  };
+
+  CoreChart.prototype.drawBar = function (cpus) {
+    const n = cpus.length;
+    const labs = this.labelsForCores(n);
+    const cfg = {
+      type: "bar",
+      data: {
+        labels: labs,
+        datasets: [
+          {
+            label: "CPU %",
+            data: cpus.slice(),
+            backgroundColor: cpus.map(function (_, i) {
+              return coreColor(i, n);
+            }),
+            borderColor: "#161b22",
+            borderWidth: 1,
+            borderRadius: 4,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        indexAxis: "y",
+        animation: prefersReduceMotion ? false : { duration: 220 },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: function (ctx) {
+                const v = ctx.parsed.x;
+                return v != null ? v.toFixed(1) + "%" : "";
+              },
+            },
+          },
+        },
+        scales: {
+          x: {
+            beginAtZero: true,
+            max: 100,
+            ticks: { color: "#8b949e", callback: function (v) { return v + "%"; } },
+            grid: { color: "#21262d" },
+          },
+          y: { ticks: { color: "#8b949e" }, grid: { color: "#21262d" } },
+        },
+      },
+    };
+    if (this.chart) this.chart.destroy();
+    this.chart = new Chart(this.canvas.getContext("2d"), cfg);
+  };
+
+  CoreChart.prototype.drawRadar = function (cpus) {
+    const n = cpus.length;
+    const labs = this.labelsForCores(n);
+    const cfg = {
+      type: "radar",
+      data: {
+        labels: labs,
+        datasets: [
+          {
+            label: "Now",
+            data: cpus.slice(),
+            backgroundColor: "rgba(88, 166, 255, 0.22)",
+            borderColor: "#58a6ff",
+            borderWidth: 2,
+            pointBackgroundColor: cpus.map(function (_, i) {
+              return coreColor(i, n);
+            }),
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: prefersReduceMotion ? false : { duration: 280 },
+        scales: {
+          r: {
+            beginAtZero: true,
+            max: 100,
+            ticks: { color: "#8b949e", backdropColor: "transparent" },
+            grid: { color: "#30363d" },
+            pointLabels: { color: "#c9d1d9", font: { size: 10 } },
+          },
+        },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: function (ctx) {
+                return ctx.chart.data.labels[ctx.dataIndex] + ": " + ctx.raw.toFixed(1) + "%";
+              },
+            },
+          },
+        },
+      },
+    };
+    if (this.chart) this.chart.destroy();
+    this.chart = new Chart(this.canvas.getContext("2d"), cfg);
+  };
+
+  CoreChart.prototype.drawLineArea = function (isArea) {
+    const n = this.n;
+    const dsets = [];
+    for (let i = 0; i < n; i++) {
+      const col = coreColor(i, n);
+      dsets.push({
+        label: "C" + i,
+        data: this.perCore[i].slice(),
+        borderColor: col,
+        backgroundColor: isArea ? col.replace("hsl(", "hsla(").replace(")", ", 0.14)") : "transparent",
+        fill: isArea,
         tension: 0.25,
         pointRadius: 0,
-        borderWidth: 1.5,
-      };
-    });
-    const chart = new Chart(canvas.getContext("2d"), {
+        borderWidth: 1.2,
+      });
+    }
+    const cfg = {
       type: "line",
-      data: { labels, datasets },
-      options: baseChartOptions(yTitle, tooltipCb),
-    });
-
-    return function pushRow(t, values) {
-      labels.push(timeLabel(t));
-      for (let i = 0; i < values.length; i++) {
-        if (datasets[i]) {
-          datasets[i].data.push(values[i]);
-        }
-      }
-      while (labels.length > MAX_POINTS) {
-        labels.shift();
-        for (let i = 0; i < datasets.length; i++) {
-          datasets[i].data.shift();
-        }
-      }
-      chart.update("none");
+      data: { labels: this.timeLabs.slice(), datasets: dsets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        interaction: { mode: "index", intersect: false },
+        plugins: {
+          legend: {
+            display: n <= 16,
+            labels: { color: "#c9d1d9", boxWidth: 8, font: { size: 9 } },
+          },
+          tooltip: {
+            callbacks: {
+              label: function (ctx) {
+                const v = ctx.parsed.y;
+                return v != null ? ctx.dataset.label + ": " + v.toFixed(1) + "%" : "";
+              },
+            },
+          },
+        },
+        scales: baseScales("%"),
+      },
     };
+    if (this.chart) this.chart.destroy();
+    this.chart = new Chart(this.canvas.getContext("2d"), cfg);
+  };
+
+  CoreChart.prototype.update = function (tWall, cpus) {
+    if (!cpus || !cpus.length) return;
+    this.ensureBuckets(cpus.length);
+    const mode = this.chartType;
+    if (mode === "bar") {
+      this.drawBar(cpus);
+      return;
+    }
+    if (mode === "radar") {
+      this.drawRadar(cpus);
+      return;
+    }
+    const lab = timeLabel(tWall);
+    this.timeLabs.push(lab);
+    for (let i = 0; i < cpus.length; i++) {
+      this.perCore[i].push(cpus[i]);
+    }
+    while (this.perCore[0].length > MAX_POINTS) {
+      this.timeLabs.shift();
+      for (let j = 0; j < cpus.length; j++) {
+        this.perCore[j].shift();
+      }
+    }
+    const needRebuild =
+      !this.chart ||
+      this.chart.config.type !== "line" ||
+      this.chart.data.datasets.length !== cpus.length;
+    if (needRebuild) {
+      this.drawLineArea(mode === "area");
+    } else {
+      this.chart.data.labels = this.timeLabs.slice();
+      for (let i = 0; i < cpus.length; i++) {
+        this.chart.data.datasets[i].data = this.perCore[i].slice();
+      }
+      this.chart.update("none");
+    }
+  };
+
+  function RootChart(canvas, panelKey) {
+    this.canvas = canvas;
+    this.panelKey = panelKey;
+    this.chart = null;
+    this.builtType = null;
+    this.types = ["doughnut", "pie", "polarArea", "bar"];
+    this.chartType = getPref("chart." + panelKey, "doughnut");
+    if (this.types.indexOf(this.chartType) < 0) this.chartType = "doughnut";
   }
 
+  RootChart.prototype.setType = function (t) {
+    if (this.types.indexOf(t) < 0) return;
+    this.chartType = t;
+    setPref("chart." + this.panelKey, t);
+    this.builtType = null;
+    if (this.chart) {
+      this.chart.destroy();
+      this.chart = null;
+    }
+  };
+
+  RootChart.prototype._diskColor = function (u) {
+    return u > 85 ? "#f85149" : u > 70 ? "#d29922" : "#3fb950";
+  };
+
+  RootChart.prototype._buildRoot = function (t, u, f, col) {
+    if (t === "bar") {
+      return {
+        type: "bar",
+        data: {
+          labels: ["Used", "Free"],
+          datasets: [
+            {
+              label: "%",
+              data: [u, f],
+              backgroundColor: [col, "#21262d"],
+              borderColor: "#161b22",
+              borderWidth: 1,
+              borderRadius: 6,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          indexAxis: "y",
+          animation: prefersReduceMotion ? false : { duration: 300 },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: function (ctx) {
+                  return ctx.label + ": " + ctx.parsed.x.toFixed(1) + "%";
+                },
+              },
+            },
+          },
+          scales: {
+            x: {
+              max: 100,
+              ticks: { color: "#8b949e", callback: function (v) { return v + "%"; } },
+              grid: { color: "#21262d" },
+            },
+            y: { ticks: { color: "#8b949e" }, grid: { display: false } },
+          },
+        },
+      };
+    }
+    const cfg = {
+      type: t,
+      data: {
+        labels: ["Used", "Free"],
+        datasets: [
+          {
+            data: [u, f],
+            backgroundColor: [col, "#21262d"],
+            borderColor: "#161b22",
+            borderWidth: 2,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: prefersReduceMotion ? false : { duration: 350 },
+        cutout: t === "doughnut" ? "68%" : undefined,
+        plugins: {
+          legend: {
+            position: "bottom",
+            labels: { color: "#c9d1d9", boxWidth: 10, font: { size: 10 } },
+          },
+          tooltip: {
+            callbacks: {
+              label: function (ctx) {
+                const v = typeof ctx.raw === "number" ? ctx.raw : ctx.parsed;
+                return ctx.label + ": " + Number(v).toFixed(1) + "%";
+              },
+            },
+          },
+        },
+      },
+    };
+    if (t === "polarArea") {
+      cfg.options.scales = {
+        r: {
+          ticks: { color: "#8b949e", backdropColor: "transparent" },
+          grid: { color: "#30363d" },
+        },
+      };
+    }
+    return cfg;
+  };
+
+  RootChart.prototype.update = function (usedPct) {
+    const u = Math.min(100, Math.max(0, usedPct));
+    const f = 100 - u;
+    const col = this._diskColor(u);
+    const t = this.chartType;
+    const needBuild = !this.chart || this.builtType !== t;
+    if (needBuild) {
+      if (this.chart) {
+        this.chart.destroy();
+        this.chart = null;
+      }
+      const cfg = this._buildRoot(t, u, f, col);
+      this.chart = new Chart(this.canvas.getContext("2d"), cfg);
+      this.builtType = t;
+      return;
+    }
+    this.chart.data.datasets[0].data = [u, f];
+    if (this.chart.data.datasets[0].backgroundColor) {
+      this.chart.data.datasets[0].backgroundColor = [col, "#21262d"];
+    }
+    this.chart.update("none");
+  };
+
+  function fillSelect(sel, defs) {
+    sel.innerHTML = "";
+    for (let i = 0; i < defs.length; i++) {
+      const o = document.createElement("option");
+      o.value = defs[i].v;
+      o.textContent = defs[i].t;
+      sel.appendChild(o);
+    }
+  }
+
+  const TIME_TYPES = [
+    { v: "line", t: "Line" },
+    { v: "area", t: "Area" },
+    { v: "bar", t: "Bar" },
+  ];
+  const CORE_TYPES = [
+    { v: "bar", t: "Bar (now)" },
+    { v: "line", t: "Line" },
+    { v: "area", t: "Area" },
+    { v: "radar", t: "Radar" },
+  ];
+  const ROOT_TYPES = [
+    { v: "doughnut", t: "Doughnut" },
+    { v: "pie", t: "Pie" },
+    { v: "polarArea", t: "Polar" },
+    { v: "bar", t: "Bar" },
+  ];
+
+  function scheduleChartResize() {
+    if (window.__lmRszT) clearTimeout(window.__lmRszT);
+    window.__lmRszT = setTimeout(function () {
+      window.dispatchEvent(new Event("resize"));
+    }, 50);
+  }
+
+  function wireSelect(panel, sel, chart, defs) {
+    fillSelect(sel, defs);
+    sel.value = chart.chartType;
+    sel.addEventListener("change", function () {
+      chart.setType(sel.value);
+      if (panel === "root" && window.__lastRootPct != null) {
+        rootCtl.update(window.__lastRootPct);
+      }
+      scheduleChartResize();
+    });
+  }
+
+  function wirePctToggle(panel, chk, bigEl, lineEl, fnLine, fnBig) {
+    const k = "pctbig." + panel;
+    chk.checked = getPref(k, "0") === "1";
+    function apply() {
+      const on = chk.checked;
+      setPref(k, on ? "1" : "0");
+      bigEl.hidden = !on;
+      bigEl.innerHTML = fnBig();
+      if (lineEl) lineEl.textContent = fnLine();
+      scheduleChartResize();
+    }
+    chk.addEventListener("change", apply);
+    return apply;
+  }
+
+  let peakNetRx = 1;
+  let peakNetTx = 1;
+  let peakDskRd = 1;
+  let peakDskWr = 1;
+  let lastMsg = null;
+  let rootCtl;
+
+  const elStripUptime = document.getElementById("val-uptime");
+  const elStripNcpu = document.getElementById("val-ncpu");
+  const elStripProcs = document.getElementById("val-procs");
+  const elStripLoad = document.getElementById("val-loadpct");
   const elStatus = document.getElementById("status");
   const elRootPct = document.getElementById("root-pct");
 
-  const pushCPU = createRollingChart(
+  const cpuChart = new RollingChart(
     document.getElementById("c-cpu"),
-    [{ label: "CPU %", color: "#58a6ff", fill: "rgba(88, 166, 255, 0.15)" }],
+    "cpu",
+    [
+      {
+        label: "CPU %",
+        color: "#58a6ff",
+        fill: "rgba(88, 166, 255, 0.15)",
+        colorDim: "rgba(88, 166, 255, 0.18)",
+      },
+      { label: "I/O wait %", color: "#d29922", colorDim: "rgba(210, 153, 34, 0.2)" },
+    ],
     "%",
     {
       label: function (ctx) {
@@ -112,32 +638,37 @@
     }
   );
 
-  const pushMem = createRollingChart(
+  const memChart = new RollingChart(
     document.getElementById("c-mem"),
+    "mem",
     [
-      { label: "RAM used %", color: "#79c0ff" },
-      { label: "Swap used %", color: "#ffa657" },
+      { label: "RAM used %", color: "#79c0ff", colorDim: "rgba(121, 192, 255, 0.2)" },
+      { label: "Swap used %", color: "#ffa657", colorDim: "rgba(255, 166, 87, 0.2)" },
+      { label: "Cached %", color: "#a371f7", colorDim: "rgba(163, 113, 247, 0.2)" },
+      { label: "Buffers %", color: "#56d364", colorDim: "rgba(86, 211, 100, 0.18)" },
     ],
-    "%"
+    "% of RAM"
   );
 
-  const pushLoad = createRollingChart(
+  const loadChart = new RollingChart(
     document.getElementById("c-load"),
+    "load",
     [
-      { label: "1 min", color: "#58a6ff" },
-      { label: "5 min", color: "#a371f7" },
-      { label: "15 min", color: "#3fb950" },
+      { label: "1 min", color: "#58a6ff", colorDim: "rgba(88, 166, 255, 0.2)" },
+      { label: "5 min", color: "#a371f7", colorDim: "rgba(163, 113, 247, 0.2)" },
+      { label: "15 min", color: "#3fb950", colorDim: "rgba(63, 185, 80, 0.2)" },
     ],
-    "Load"
+    "Load avg"
   );
 
-  const pushNet = createRollingChart(
+  const netChart = new RollingChart(
     document.getElementById("c-net"),
+    "net",
     [
       { label: "RX", color: "#3fb950" },
       { label: "TX", color: "#a371f7" },
     ],
-    "Throughput",
+    "B/s",
     {
       label: function (ctx) {
         const v = ctx.parsed.y;
@@ -146,13 +677,14 @@
     }
   );
 
-  const pushDisk = createRollingChart(
+  const diskChart = new RollingChart(
     document.getElementById("c-disk"),
+    "disk",
     [
       { label: "Read", color: "#79c0ff" },
       { label: "Write", color: "#ffa657" },
     ],
-    "Throughput",
+    "B/s",
     {
       label: function (ctx) {
         const v = ctx.parsed.y;
@@ -161,63 +693,317 @@
     }
   );
 
-  const rootCtx = document.getElementById("c-root").getContext("2d");
-  const rootChart = new Chart(rootCtx, {
-    type: "doughnut",
-    data: {
-      labels: ["Used", "Free"],
-      datasets: [
-        {
-          data: [0, 100],
-          backgroundColor: ["#58a6ff", "#21262d"],
-          borderColor: "#161b22",
-          borderWidth: 2,
-        },
-      ],
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      cutout: "68%",
-      animation: prefersReduceMotion ? false : { duration: 400 },
-      plugins: {
-        legend: {
-          position: "bottom",
-          labels: { color: "#c9d1d9", boxWidth: 10, font: { size: 10 } },
-        },
-        tooltip: {
-          callbacks: {
-            label: function (ctx) {
-              const v = ctx.parsed;
-              return ctx.label + ": " + v.toFixed(1) + "%";
-            },
-          },
-        },
+  const procsChart = new RollingChart(
+    document.getElementById("c-procs"),
+    "procs",
+    [
+      {
+        label: "Running",
+        color: "#58a6ff",
+        fill: "rgba(88, 166, 255, 0.12)",
+        colorDim: "rgba(88, 166, 255, 0.2)",
       },
-    },
+    ],
+    "Tasks"
+  );
+
+  const coreChart = new CoreChart(document.getElementById("c-cores"), "cores");
+  rootCtl = new RootChart(document.getElementById("c-root"), "root");
+
+  document.querySelectorAll("select.chart-type").forEach(function (sel) {
+    const panel = sel.getAttribute("data-panel");
+    if (panel === "cpu") wireSelect(panel, sel, cpuChart, TIME_TYPES);
+    else if (panel === "mem") wireSelect(panel, sel, memChart, TIME_TYPES);
+    else if (panel === "load") wireSelect(panel, sel, loadChart, TIME_TYPES);
+    else if (panel === "net") wireSelect(panel, sel, netChart, TIME_TYPES);
+    else if (panel === "disk") wireSelect(panel, sel, diskChart, TIME_TYPES);
+    else if (panel === "procs") wireSelect(panel, sel, procsChart, TIME_TYPES);
+    else if (panel === "cores") wireSelect(panel, sel, coreChart, CORE_TYPES);
+    else if (panel === "root") wireSelect(panel, sel, rootCtl, ROOT_TYPES);
   });
 
-  function updateRoot(pct) {
-    const used = Math.min(100, Math.max(0, pct));
-    const free = 100 - used;
-    rootChart.data.datasets[0].data = [used, free];
-    let col = "#3fb950";
-    if (used > 85) col = "#f85149";
-    else if (used > 70) col = "#d29922";
-    rootChart.data.datasets[0].backgroundColor = [col, "#21262d"];
-    rootChart.update("none");
-    elRootPct.innerHTML =
-      used.toFixed(1) + "%<small>of root filesystem</small>";
-  }
+  const refreshCpuPct = wirePctToggle(
+    "cpu",
+    document.querySelector('.opt-pct[data-panel="cpu"]'),
+    document.getElementById("pct-cpu-big"),
+    document.getElementById("pct-cpu-line"),
+    function () {
+      if (!lastMsg) return "";
+      return (
+        "CPU " +
+        lastMsg.cpu.toFixed(1) +
+        "% · I/O wait " +
+        (lastMsg.ioWait != null ? lastMsg.ioWait : 0).toFixed(1) +
+        "%"
+      );
+    },
+    function () {
+      if (!lastMsg) return "";
+      return (
+        "<strong>" +
+        lastMsg.cpu.toFixed(1) +
+        "%</strong> CPU<small>I/O wait " +
+        (lastMsg.ioWait != null ? lastMsg.ioWait : 0).toFixed(1) +
+        "%</small>"
+      );
+    }
+  );
+
+  const refreshMemPct = wirePctToggle(
+    "mem",
+    document.querySelector('.opt-pct[data-panel="mem"]'),
+    document.getElementById("pct-mem-big"),
+    document.getElementById("pct-mem-line"),
+    function () {
+      if (!lastMsg) return "";
+      return (
+        "RAM " +
+        lastMsg.ram.toFixed(1) +
+        "% · Swap " +
+        lastMsg.swap.toFixed(1) +
+        "% · Cache " +
+        lastMsg.cachedPct.toFixed(1) +
+        "% · Buf " +
+        lastMsg.buffersPct.toFixed(1) +
+        "%"
+      );
+    },
+    function () {
+      if (!lastMsg) return "";
+      return (
+        "<strong>" +
+        lastMsg.ram.toFixed(1) +
+        "%</strong> RAM<small>swap " +
+        lastMsg.swap.toFixed(1) +
+        "% · cache " +
+        lastMsg.cachedPct.toFixed(1) +
+        "%</small>"
+      );
+    }
+  );
+
+  const refreshLoadPct = wirePctToggle(
+    "load",
+    document.querySelector('.opt-pct[data-panel="load"]'),
+    document.getElementById("pct-load-big"),
+    document.getElementById("pct-load-line"),
+    function () {
+      if (!lastMsg) return "";
+      return (
+        "1m " +
+        lastMsg.load1.toFixed(2) +
+        " · 5m " +
+        lastMsg.load5.toFixed(2) +
+        " · 15m " +
+        lastMsg.load15.toFixed(2) +
+        " · " +
+        lastMsg.load1Pct.toFixed(0) +
+        "% of CPUs"
+      );
+    },
+    function () {
+      if (!lastMsg) return "";
+      return (
+        "<strong>" +
+        lastMsg.load1Pct.toFixed(0) +
+        "%</strong> load vs CPUs<small>1m " +
+        lastMsg.load1.toFixed(2) +
+        "</small>"
+      );
+    }
+  );
+
+  const refreshNetPct = wirePctToggle(
+    "net",
+    document.querySelector('.opt-pct[data-panel="net"]'),
+    document.getElementById("pct-net-big"),
+    document.getElementById("pct-net-line"),
+    function () {
+      if (!lastMsg) return "";
+      const prx = peakNetRx > 0 ? (100 * lastMsg.netRx) / peakNetRx : 0;
+      const ptx = peakNetTx > 0 ? (100 * lastMsg.netTx) / peakNetTx : 0;
+      return (
+        formatRate(lastMsg.netRx) +
+        " RX · " +
+        formatRate(lastMsg.netTx) +
+        " TX · " +
+        prx.toFixed(0) +
+        "% / " +
+        ptx.toFixed(0) +
+        "% of session peak"
+      );
+    },
+    function () {
+      if (!lastMsg) return "";
+      const prx = peakNetRx > 0 ? (100 * lastMsg.netRx) / peakNetRx : 0;
+      const ptx = peakNetTx > 0 ? (100 * lastMsg.netTx) / peakNetTx : 0;
+      return (
+        "<strong>" +
+        prx.toFixed(0) +
+        "%</strong> RX of peak<small>TX " +
+        ptx.toFixed(0) +
+        "% of peak · " +
+        formatRate(lastMsg.netRx) +
+        "</small>"
+      );
+    }
+  );
+
+  const refreshDiskPct = wirePctToggle(
+    "disk",
+    document.querySelector('.opt-pct[data-panel="disk"]'),
+    document.getElementById("pct-disk-big"),
+    document.getElementById("pct-disk-line"),
+    function () {
+      if (!lastMsg) return "";
+      const pr = peakDskRd > 0 ? (100 * lastMsg.dskRd) / peakDskRd : 0;
+      const pw = peakDskWr > 0 ? (100 * lastMsg.dskWr) / peakDskWr : 0;
+      return (
+        formatRate(lastMsg.dskRd) +
+        " R · " +
+        formatRate(lastMsg.dskWr) +
+        " W · " +
+        pr.toFixed(0) +
+        "% / " +
+        pw.toFixed(0) +
+        "% of peak"
+      );
+    },
+    function () {
+      if (!lastMsg) return "";
+      const pr = peakDskRd > 0 ? (100 * lastMsg.dskRd) / peakDskRd : 0;
+      return (
+        "<strong>" +
+        pr.toFixed(0) +
+        "%</strong> read of peak<small>write " +
+        (peakDskWr > 0 ? ((100 * lastMsg.dskWr) / peakDskWr).toFixed(0) : "0") +
+        "%</small>"
+      );
+    }
+  );
+
+  const refreshCoresPct = wirePctToggle(
+    "cores",
+    document.querySelector('.opt-pct[data-panel="cores"]'),
+    document.getElementById("pct-cores-big"),
+    document.getElementById("pct-cores-line"),
+    function () {
+      if (!lastMsg || !lastMsg.cpus || !lastMsg.cpus.length) return "";
+      let sum = 0;
+      for (let i = 0; i < lastMsg.cpus.length; i++) sum += lastMsg.cpus[i];
+      const avg = sum / lastMsg.cpus.length;
+      return (
+        lastMsg.cpus.length +
+        " cores · avg " +
+        avg.toFixed(1) +
+        "% · max " +
+        Math.max.apply(null, lastMsg.cpus).toFixed(1) +
+        "%"
+      );
+    },
+    function () {
+      if (!lastMsg || !lastMsg.cpus || !lastMsg.cpus.length) return "";
+      const avg =
+        lastMsg.cpus.reduce(function (a, b) {
+          return a + b;
+        }, 0) / lastMsg.cpus.length;
+      return (
+        "<strong>" +
+        avg.toFixed(1) +
+        "%</strong> avg core<small>max " +
+        Math.max.apply(null, lastMsg.cpus).toFixed(1) +
+        "%</small>"
+      );
+    }
+  );
+
+  const refreshProcsPct = wirePctToggle(
+    "procs",
+    document.querySelector('.opt-pct[data-panel="procs"]'),
+    document.getElementById("pct-procs-big"),
+    document.getElementById("pct-procs-line"),
+    function () {
+      if (!lastMsg) return "";
+      const r = lastMsg.procsRun != null ? lastMsg.procsRun : 0;
+      const tot = lastMsg.procsTotal != null ? lastMsg.procsTotal : 0;
+      return r + " runnable of " + tot + " tasks";
+    },
+    function () {
+      if (!lastMsg) return "";
+      const r = lastMsg.procsRun != null ? lastMsg.procsRun : 0;
+      return "<strong>" + r + "</strong> running<small>tasks in system</small>";
+    }
+  );
+
+  const refreshRootPct = wirePctToggle(
+    "root",
+    document.querySelector('.opt-pct[data-panel="root"]'),
+    document.getElementById("pct-root-big"),
+    document.getElementById("pct-root-line"),
+    function () {
+      if (!lastMsg) return "";
+      return lastMsg.rootPct.toFixed(1) + "% of root filesystem used";
+    },
+    function () {
+      if (!lastMsg) return "";
+      return (
+        "<strong>" +
+        lastMsg.rootPct.toFixed(1) +
+        "%</strong> used<small>root filesystem</small>"
+      );
+    }
+  );
 
   function onSample(msg) {
+    lastMsg = msg;
+    peakNetRx = Math.max(peakNetRx, msg.netRx || 0, 1);
+    peakNetTx = Math.max(peakNetTx, msg.netTx || 0, 1);
+    peakDskRd = Math.max(peakDskRd, msg.dskRd || 0, 1);
+    peakDskWr = Math.max(peakDskWr, msg.dskWr || 0, 1);
+
+    elStripUptime.textContent = formatUptime(msg.uptime || 0);
+    elStripNcpu.textContent = String(msg.ncpu != null ? msg.ncpu : "—");
+    elStripProcs.textContent =
+      (msg.procsRun != null ? msg.procsRun : "—") +
+      " / " +
+      (msg.procsTotal != null ? msg.procsTotal : "—");
+    elStripLoad.textContent =
+      (msg.load1Pct != null ? msg.load1Pct.toFixed(0) : "—") + "% vs CPUs";
+
     const t = msg.t;
-    pushCPU(t, [msg.cpu]);
-    pushMem(t, [msg.ram, msg.swap]);
-    pushLoad(t, [msg.load1, msg.load5, msg.load15]);
-    pushNet(t, [msg.netRx, msg.netTx]);
-    pushDisk(t, [msg.dskRd, msg.dskWr]);
-    updateRoot(msg.rootPct);
+    cpuChart.pushRow(t, [msg.cpu, msg.ioWait != null ? msg.ioWait : 0]);
+    memChart.pushRow(t, [msg.ram, msg.swap, msg.cachedPct || 0, msg.buffersPct || 0]);
+    loadChart.pushRow(t, [msg.load1, msg.load5, msg.load15]);
+    netChart.pushRow(t, [msg.netRx, msg.netTx]);
+    diskChart.pushRow(t, [msg.dskRd, msg.dskWr]);
+    procsChart.pushRow(t, [msg.procsRun != null ? msg.procsRun : 0]);
+
+    if (msg.cpus && msg.cpus.length) {
+      coreChart.update(t, msg.cpus);
+    }
+
+    window.__lastRootPct = msg.rootPct;
+    rootCtl.update(msg.rootPct);
+    elRootPct.innerHTML =
+      msg.rootPct.toFixed(1) + "%<small>of root filesystem</small>";
+
+    refreshCpuPct();
+    refreshMemPct();
+    refreshLoadPct();
+    refreshNetPct();
+    refreshDiskPct();
+    refreshCoresPct();
+    refreshProcsPct();
+    refreshRootPct();
+
+    if (!window.__lmLayoutOnce) {
+      window.__lmLayoutOnce = true;
+      requestAnimationFrame(function () {
+        requestAnimationFrame(function () {
+          window.dispatchEvent(new Event("resize"));
+        });
+      });
+    }
   }
 
   let backoff = 1000;
@@ -247,11 +1033,13 @@
     ws.onmessage = function (ev) {
       try {
         onSample(JSON.parse(ev.data));
-      } catch (_) {
-        /* ignore */
-      }
+      } catch (_) {}
     };
   }
+
+  document.querySelectorAll("select.chart-type").forEach(function (sel) {
+    sel.value = getPref("chart." + sel.getAttribute("data-panel"), sel.value);
+  });
 
   connect();
 })();

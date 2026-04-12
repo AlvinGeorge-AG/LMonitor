@@ -76,6 +76,39 @@ func TestParseDiskStatsTotals(t *testing.T) {
 	}
 }
 
+func TestParseUptime(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("testdata", "proc", "uptime"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	u, err := parseUptime(b)
+	if err != nil || u < 86450 || u > 86451 {
+		t.Fatalf("uptime: %v err %v", u, err)
+	}
+}
+
+func TestParseLoadavgProcs(t *testing.T) {
+	b := []byte("0.52 0.58 0.59 2/841 12345\n")
+	r, tot, err := parseLoadavgProcs(b)
+	if err != nil || r != 2 || tot != 841 {
+		t.Fatalf("got %d/%d err %v", r, tot, err)
+	}
+}
+
+func TestParsePerCoreJiffies(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("testdata", "proc", "stat"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	idle, tot, err := parsePerCoreJiffies(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(idle) < 1 || len(idle) != len(tot) {
+		t.Fatalf("cores: idle=%d total=%d", len(idle), len(tot))
+	}
+}
+
 func TestIsWholeDisk(t *testing.T) {
 	cases := map[string]bool{
 		"sda":       true,

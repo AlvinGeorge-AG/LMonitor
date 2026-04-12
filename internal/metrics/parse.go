@@ -29,44 +29,92 @@ func readProcFile(procRoot, name string) ([]byte, error) {
 	return os.ReadFile(p)
 }
 
-// parseCPUTimes returns idle jiffies and total jiffies from the aggregate "cpu" line in /proc/stat.
-func parseCPUTimes(stat []byte) (idle, total uint64, err error) {
+var perCPUName = regexp.MustCompile(`^cpu[0-9]+$`)
+
+// parseAggregateCPU returns idle+jowait (for total non-idle CPU%), raw iowait jiffies, and total jiffies.
+func parseAggregateCPU(stat []byte) (idleAll, iowait, total uint64, err error) {
 	sc := bufio.NewScanner(strings.NewReader(string(stat)))
 	for sc.Scan() {
 		line := sc.Text()
-		if !strings.HasPrefix(line, "cpu") {
-			continue
-		}
 		fields := strings.Fields(line)
 		if len(fields) < 2 || fields[0] != "cpu" {
 			continue
 		}
-		var sum uint64
-		var idleVal, iowait uint64
-		for i := 1; i < len(fields); i++ {
-			v, e := strconv.ParseUint(fields[i], 10, 64)
-			if e != nil {
-				return 0, 0, fmt.Errorf("cpu field %d: %w", i, e)
-			}
-			sum += v
-			switch i {
-			case 4:
-				idleVal = v
-			case 5:
-				iowait = v
-			}
+		idleA, io, tot, e := jiffiesFromCPUFields(fields)
+		if e != nil {
+			return 0, 0, 0, e
 		}
-		idleAll := idleVal + iowait
-		return idleAll, sum, nil
+		return idleA, io, tot, nil
 	}
 	if err := sc.Err(); err != nil {
-		return 0, 0, err
+		return 0, 0, 0, err
 	}
-	return 0, 0, fmt.Errorf("no aggregate cpu line in stat")
+	return 0, 0, 0, fmt.Errorf("no aggregate cpu line in stat")
+}
+
+func jiffiesFromCPUFields(fields []string) (idleAll, iowait, total uint64, err error) {
+	if len(fields) < 6 {
+		return 0, 0, 0, fmt.Errorf("cpu line too short")
+	}
+	var idleVal uint64
+	for i := 1; i < len(fields); i++ {
+		v, e := strconv.ParseUint(fields[i], 10, 64)
+		if e != nil {
+			return 0, 0, 0, fmt.Errorf("cpu field %d: %w", i, e)
+		}
+		total += v
+		switch i {
+		case 4:
+			idleVal = v
+		case 5:
+			iowait = v
+		}
+	}
+	idleAll = idleVal + iowait
+	return idleAll, iowait, total, nil
+}
+
+// parseCPUTimes returns idle jiffies and total jiffies from the aggregate "cpu" line in /proc/stat.
+func parseCPUTimes(stat []byte) (idle, total uint64, err error) {
+	idleA, _, tot, err := parseAggregateCPU(stat)
+	return idleA, tot, err
+}
+
+// parsePerCoreJiffies returns idle+wait and total jiffies per logical CPU, in core index order.
+func parsePerCoreJiffies(stat []byte) (idle []uint64, total []uint64, err error) {
+	sc := bufio.NewScanner(strings.NewReader(string(stat)))
+	for sc.Scan() {
+		fields := strings.Fields(sc.Text())
+		if len(fields) < 2 || !perCPUName.MatchString(fields[0]) {
+			continue
+		}
+		idleA, _, tot, e := jiffiesFromCPUFields(fields)
+		if e != nil {
+			return nil, nil, e
+		}
+		idle = append(idle, idleA)
+		total = append(total, tot)
+	}
+	if err := sc.Err(); err != nil {
+		return nil, nil, err
+	}
+	if len(idle) == 0 {
+		return nil, nil, fmt.Errorf("no per-cpu lines in stat")
+	}
+	return idle, total, nil
 }
 
 func parseMemPercents(meminfo []byte) (ramUsedPct, swapUsedPct float64, err error) {
-	var memTotal, memAvail, swapTotal, swapFree float64
+	_, _, _, _, ramUsedPct, swapUsedPct, err = parseMeminfo(meminfo)
+	if err != nil {
+		return 0, 0, err
+	}
+	return ramUsedPct, swapUsedPct, nil
+}
+
+// parseMeminfo returns memTotal (kB), cached and buffers (kB), avail (kB), and percentage fields.
+func parseMeminfo(meminfo []byte) (memTotal, cached, buffers, memAvail, ramUsedPct, swapUsedPct float64, err error) {
+	var swapTotal, swapFree float64
 	sc := bufio.NewScanner(strings.NewReader(string(meminfo)))
 	for sc.Scan() {
 		line := sc.Text()
@@ -84,6 +132,10 @@ func parseMemPercents(meminfo []byte) (ramUsedPct, swapUsedPct float64, err erro
 			memTotal = val
 		case "MemAvailable":
 			memAvail = val
+		case "Cached":
+			cached = val
+		case "Buffers":
+			buffers = val
 		case "SwapTotal":
 			swapTotal = val
 		case "SwapFree":
@@ -91,19 +143,49 @@ func parseMemPercents(meminfo []byte) (ramUsedPct, swapUsedPct float64, err erro
 		}
 	}
 	if err = sc.Err(); err != nil {
-		return 0, 0, err
+		return 0, 0, 0, 0, 0, 0, err
 	}
 	if memTotal <= 0 {
-		return 0, 0, fmt.Errorf("MemTotal missing or zero")
+		return 0, 0, 0, 0, 0, 0, fmt.Errorf("MemTotal missing or zero")
 	}
 	if memAvail == 0 {
-		return 0, 0, fmt.Errorf("MemAvailable missing")
+		return 0, 0, 0, 0, 0, 0, fmt.Errorf("MemAvailable missing")
 	}
 	ramUsedPct = 100 * (memTotal - memAvail) / memTotal
 	if swapTotal > 0 {
 		swapUsedPct = 100 * (swapTotal - swapFree) / swapTotal
 	}
-	return ramUsedPct, swapUsedPct, nil
+	return memTotal, cached, buffers, memAvail, ramUsedPct, swapUsedPct, nil
+}
+
+// parseUptime returns system uptime in seconds (first field of /proc/uptime).
+func parseUptime(data []byte) (float64, error) {
+	fields := strings.Fields(string(data))
+	if len(fields) < 1 {
+		return 0, fmt.Errorf("uptime: empty")
+	}
+	return strconv.ParseFloat(fields[0], 64)
+}
+
+// parseLoadavgProcs parses the "running/total" task counts from /proc/loadavg.
+func parseLoadavgProcs(data []byte) (running, total int, err error) {
+	fields := strings.Fields(string(data))
+	if len(fields) < 4 {
+		return 0, 0, fmt.Errorf("loadavg: want procs field")
+	}
+	parts := strings.Split(fields[3], "/")
+	if len(parts) != 2 {
+		return 0, 0, fmt.Errorf("loadavg: bad procs field %q", fields[3])
+	}
+	running, err = strconv.Atoi(parts[0])
+	if err != nil {
+		return 0, 0, err
+	}
+	total, err = strconv.Atoi(parts[1])
+	if err != nil {
+		return 0, 0, err
+	}
+	return running, total, nil
 }
 
 func parseLoadAvg(data []byte) (l1, l5, l15 float64, err error) {

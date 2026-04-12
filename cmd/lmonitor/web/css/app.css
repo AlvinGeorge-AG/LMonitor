@@ -12,7 +12,19 @@
   --tx: #a371f7;
   --read: #79c0ff;
   --write: #ffa657;
+  /* Fixed card height: charts fill the remainder; rows no longer stretch to the tallest plot. */
+  --panel-h: 380px;
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, sans-serif;
+}
+
+html {
+  height: 100%;
+}
+
+@media (max-height: 720px) {
+  :root {
+    --panel-h: 320px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -29,21 +41,53 @@
 
 body {
   margin: 0;
-  min-height: 100vh;
+  min-height: 100%;
   background: var(--bg);
   color: var(--text);
+  overflow-x: hidden;
 }
 
 .topbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
   padding: 0.75rem 1.25rem;
   border-bottom: 1px solid var(--border);
   background: rgba(22, 27, 34, 0.95);
   position: sticky;
   top: 0;
   z-index: 10;
+}
+
+.topbar-mid {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0.35rem;
+  justify-content: center;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 2px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
+.pill {
+  font-size: 0.7rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 6px;
+  background: #21262d;
+  border: 1px solid var(--border);
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.pill-k {
+  color: var(--muted);
+  margin-right: 0.25rem;
 }
 
 .brand {
@@ -88,22 +132,34 @@ body {
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
   gap: 1rem;
   padding: 1rem;
-  align-items: stretch;
+  align-items: start;
 }
 
 .panel {
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 10px;
-  padding: 0.75rem 1rem 1rem;
+  padding: 0.75rem 1rem 0.85rem;
   display: flex;
   flex-direction: column;
-  min-height: 260px;
+  height: var(--panel-h);
+  max-height: var(--panel-h);
+  min-height: 0;
+  overflow: hidden;
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.25);
 }
 
-.panel h2 {
-  margin: 0 0 0.5rem;
+.panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+  flex-shrink: 0;
+}
+
+.panel-title-block h2 {
+  margin: 0 0 0.2rem;
   font-size: 0.8rem;
   font-weight: 600;
   text-transform: uppercase;
@@ -111,25 +167,110 @@ body {
   color: var(--muted);
 }
 
+.panel-pct-line {
+  margin: 0;
+  font-size: 0.72rem;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.35;
+  opacity: 0.92;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  word-break: break-word;
+}
+
+.panel-tools {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
+}
+
+.panel-tools select.chart-type {
+  font-size: 0.7rem;
+  padding: 0.2rem 0.35rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: #0d1117;
+  color: var(--text);
+  max-width: 8.5rem;
+}
+
+.panel-tools .chk {
+  font-size: 0.65rem;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.panel-pct-big {
+  font-size: 1.2rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  margin: 0.25rem 0 0.4rem;
+  padding: 0.4rem 0.55rem;
+  border-radius: 8px;
+  background: linear-gradient(135deg, rgba(88, 166, 255, 0.12), rgba(163, 113, 247, 0.08));
+  border: 1px solid var(--border);
+  line-height: 1.35;
+  flex-shrink: 0;
+}
+
+.panel-pct-big[hidden] {
+  display: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+.panel-pct-big small {
+  display: block;
+  font-size: 0.65rem;
+  font-weight: 500;
+  color: var(--muted);
+  margin-top: 0.2rem;
+}
+
 .canvas-wrap {
   position: relative;
-  flex: 1;
-  min-height: 200px;
+  flex: 1 1 0;
+  min-height: 0;
+  width: 100%;
+  overflow: hidden;
+}
+
+.canvas-wrap canvas {
+  display: block;
+  max-width: 100%;
 }
 
 .panel-donut .donut-wrap {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 1rem;
-  flex: 1;
-  min-height: 200px;
+  gap: 0.75rem;
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
 }
 
-.panel-donut .donut {
-  flex: 1;
-  max-width: 200px;
-  min-height: 180px;
+/* Root chart: bounded box so doughnut/pie does not stretch the row */
+.panel-donut .canvas-wrap.donut {
+  flex: 1 1 58%;
+  min-width: 0;
+  min-height: 160px;
+  max-height: 240px;
+  position: relative;
+}
+
+.panel-donut .root-pct {
+  flex: 0 0 auto;
+  align-self: center;
 }
 
 .root-pct {
