@@ -21,7 +21,7 @@
   function setPref(key, val) {
     try {
       localStorage.setItem(LS + key, val);
-    } catch (_) {}
+    } catch (_) { }
   }
 
   Chart.defaults.color = "#8b949e";
@@ -576,6 +576,14 @@
     }, 50);
   }
 
+  function classifyLogLine(line) {
+    const upper = line.toUpperCase();
+    if (upper.indexOf("ERROR") >= 0 || upper.indexOf("FATAL") >= 0) return "error";
+    if (upper.indexOf("WARN") >= 0) return "warn";
+    if (upper.indexOf("DEBUG") >= 0) return "debug";
+    return "info";
+  }
+
   function wireSelect(panel, sel, chart, defs) {
     fillSelect(sel, defs);
     sel.value = chart.chartType;
@@ -609,6 +617,9 @@
   let peakDskWr = 1;
   let lastMsg = null;
   let rootCtl;
+  let logWsBackoff = 1000;
+  const logWsMaxBackoff = 30000;
+  const logRows = [];
 
   const elStripUptime = document.getElementById("val-uptime");
   const elStripNcpu = document.getElementById("val-ncpu");
@@ -616,6 +627,9 @@
   const elStripLoad = document.getElementById("val-loadpct");
   const elStatus = document.getElementById("status");
   const elRootPct = document.getElementById("root-pct");
+  const elLogView = document.getElementById("log-view");
+  let elLogEmpty = document.getElementById("log-empty");
+  const elLogClear = document.getElementById("log-clear");
 
   const cpuChart = new RollingChart(
     document.getElementById("c-cpu"),
@@ -954,6 +968,50 @@
     }
   );
 
+  function logNearBottom() {
+    return elLogView.scrollTop + elLogView.clientHeight >= elLogView.scrollHeight - 24;
+  }
+
+  function appendLogLine(line) {
+    if (line == null) return;
+    const text = String(line);
+    if (!text) return;
+    const stickToBottom = logNearBottom();
+    if (elLogEmpty) {
+      elLogEmpty.remove();
+      elLogEmpty = null;
+    }
+    const row = document.createElement("div");
+    row.className = "log-line log-" + classifyLogLine(text);
+    row.textContent = text;
+    elLogView.appendChild(row);
+    logRows.push(row);
+    while (logRows.length > 200) {
+      const old = logRows.shift();
+      if (old) old.remove();
+    }
+    if (stickToBottom) {
+      elLogView.scrollTop = elLogView.scrollHeight;
+    }
+  }
+
+  function resetLogs() {
+    logRows.length = 0;
+    elLogView.innerHTML = "";
+    const empty = document.createElement("div");
+    empty.id = "log-empty";
+    empty.className = "log-empty";
+    empty.textContent = "Waiting for log output…";
+    elLogView.appendChild(empty);
+    elLogEmpty = empty;
+  }
+
+  if (elLogClear) {
+    elLogClear.addEventListener("click", function () {
+      resetLogs();
+    });
+  }
+
   function onSample(msg) {
     lastMsg = msg;
     peakNetRx = Math.max(peakNetRx, msg.netRx || 0, 1);
@@ -1033,7 +1091,27 @@
     ws.onmessage = function (ev) {
       try {
         onSample(JSON.parse(ev.data));
-      } catch (_) {}
+      } catch (_) { }
+    };
+  }
+
+  function connectLogs() {
+    const proto = location.protocol === "https:" ? "wss:" : "ws:";
+    const url = proto + "//" + location.host + "/logs";
+    const ws = new WebSocket(url);
+    ws.onopen = function () {
+      resetLogs();
+      logWsBackoff = 1000;
+    };
+    ws.onclose = function () {
+      setTimeout(connectLogs, logWsBackoff);
+      logWsBackoff = Math.min(logWsMaxBackoff, Math.floor(logWsBackoff * 1.5));
+    };
+    ws.onerror = function () {
+      ws.close();
+    };
+    ws.onmessage = function (ev) {
+      appendLogLine(String(ev.data));
     };
   }
 
@@ -1042,4 +1120,5 @@
   });
 
   connect();
+  connectLogs();
 })();

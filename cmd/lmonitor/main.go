@@ -4,9 +4,11 @@ import (
 	"embed"
 	"flag"
 	"fmt"
+	"io"
 	"io/fs"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
 	"lmonitor/internal/metrics"
@@ -24,6 +26,9 @@ func main() {
 
 	col := metrics.NewCollector()
 	hub := server.NewHub()
+	logHub := server.NewLogHub()
+	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
+	log.SetOutput(io.MultiWriter(os.Stderr, logHub.Writer()))
 
 	if *printMode {
 		for {
@@ -45,10 +50,11 @@ func main() {
 	mux := http.NewServeMux()
 	mux.Handle("/", http.FileServer(http.FS(static)))
 	mux.Handle("/ws", hub.Handler())
+	mux.Handle("/logs", logHub.Handler())
 
 	go server.RunPoller(col, hub, *interval, nil)
 
-	log.Printf("LMonitor listening on http://%s", *addr)
+	log.Printf("INFO LMonitor listening on http://%s", *addr)
 	if err := http.ListenAndServe(*addr, mux); err != nil {
 		log.Fatal(err)
 	}

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -72,7 +73,7 @@ func (h *Hub) Handler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
-			log.Printf("websocket upgrade: %v", err)
+			log.Printf("WARN websocket upgrade: %v", err)
 			return
 		}
 		h.Add(conn)
@@ -91,6 +92,28 @@ func (h *Hub) Handler() http.Handler {
 	})
 }
 
+func formatRate(bps float64) string {
+	if bps >= 1e9 {
+		return formatFixed(bps/1e9, 2) + " GB/s"
+	}
+	if bps >= 1e6 {
+		return formatFixed(bps/1e6, 2) + " MB/s"
+	}
+	if bps >= 1e3 {
+		return formatFixed(bps/1e3, 1) + " KB/s"
+	}
+	return formatFixed(bps, 0) + " B/s"
+}
+
+func formatFixed(v float64, digits int) string {
+	s := strconv.FormatFloat(v, 'f', digits, 64)
+	s = strings.TrimRight(strings.TrimRight(s, "0"), ".")
+	if s == "" {
+		return "0"
+	}
+	return s
+}
+
 // RunPoller collects metrics every interval and broadcasts; if printFn non-nil, also logs.
 func RunPoller(col *metrics.Collector, hub *Hub, interval time.Duration, printFn func(metrics.Sample)) {
 	t := time.NewTicker(interval)
@@ -105,5 +128,25 @@ func RunPoller(col *metrics.Collector, hub *Hub, interval time.Duration, printFn
 			printFn(s)
 		}
 		hub.BroadcastJSON(s)
+		log.Printf(
+			"DEBUG sample cpu=%.1f%% iow=%.1f%% ram=%.1f%% swap=%.1f%% cache=%.1f%% buf=%.1f%% load=%.2f/%.2f/%.2f load%%=%.1f%% tasks=%d/%d net=%s/%s disk=%s/%s root=%.1f%%",
+			s.CPU,
+			s.IOWait,
+			s.RAM,
+			s.Swap,
+			s.Cached,
+			s.Buffers,
+			s.Load1,
+			s.Load5,
+			s.Load15,
+			s.Load1Pct,
+			s.ProcsRun,
+			s.ProcsTotal,
+			formatRate(s.NetRx),
+			formatRate(s.NetTx),
+			formatRate(s.DskRd),
+			formatRate(s.DskWr),
+			s.RootPct,
+		)
 	}
 }

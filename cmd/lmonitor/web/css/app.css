@@ -273,6 +273,79 @@ body {
   align-self: center;
 }
 
+.panel-log {
+  grid-column: span 2;
+}
+
+.panel-log .panel-head {
+  margin-bottom: 0.45rem;
+}
+
+.log-clear {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--text);
+  padding: 0.28rem 0.55rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: #0d1117;
+  cursor: pointer;
+}
+
+.log-clear:hover {
+  border-color: rgba(88, 166, 255, 0.55);
+}
+
+.log-view {
+  flex: 1 1 0;
+  min-height: 0;
+  padding: 0.7rem 0.75rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(13, 17, 23, 0.92), rgba(9, 12, 18, 0.98));
+  overflow: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 0.72rem;
+  line-height: 1.45;
+  scrollbar-width: thin;
+}
+
+.log-line {
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: #c9d1d9;
+}
+
+.log-line+.log-line {
+  margin-top: 0.3rem;
+}
+
+.log-line.log-info {
+  color: #c9d1d9;
+}
+
+.log-line.log-debug {
+  color: var(--muted);
+}
+
+.log-line.log-warn {
+  color: var(--warn);
+}
+
+.log-line.log-error {
+  color: var(--bad);
+}
+
+.log-empty {
+  color: var(--muted);
+}
+
+@media (max-width: 1100px) {
+  .panel-log {
+    grid-column: span 1;
+  }
+}
+
 .root-pct {
   font-size: 1.75rem;
   font-weight: 700;

@@ -144,6 +144,21 @@
         <div id="root-pct" class="root-pct">—</div>
       </div>
     </section>
+
+    <section class="panel panel-log" data-panel="logs">
+      <div class="panel-head">
+        <div class="panel-title-block">
+          <h2>System logs</h2>
+          <p class="panel-pct-line">Live, timestamped output from the monitor process.</p>
+        </div>
+        <div class="panel-tools">
+          <button id="log-clear" class="log-clear" type="button">Clear</button>
+        </div>
+      </div>
+      <div class="log-view" id="log-view" aria-live="polite" aria-relevant="additions text">
+        <div class="log-empty" id="log-empty">Waiting for log output…</div>
+      </div>
+    </section>
   </main>
 
   <script src="js/chart.umd.min.js"></script>
