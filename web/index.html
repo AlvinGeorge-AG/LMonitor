@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>LMonitor</title>
+  <link rel="stylesheet" href="css/app.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">LMonitor</span>
+      <span class="sub">local system metrics</span>
+    </div>
+    <div id="status" class="status status-offline" role="status">Reconnecting…</div>
+  </header>
+
+  <main class="grid">
+    <section class="panel">
+      <h2>CPU</h2>
+      <div class="canvas-wrap"><canvas id="c-cpu" aria-label="CPU usage"></canvas></div>
+    </section>
+    <section class="panel">
+      <h2>Memory</h2>
+      <div class="canvas-wrap"><canvas id="c-mem" aria-label="Memory usage"></canvas></div>
+    </section>
+    <section class="panel">
+      <h2>Load average</h2>
+      <div class="canvas-wrap"><canvas id="c-load" aria-label="Load average"></canvas></div>
+    </section>
+    <section class="panel">
+      <h2>Network</h2>
+      <div class="canvas-wrap"><canvas id="c-net" aria-label="Network throughput"></canvas></div>
+    </section>
+    <section class="panel">
+      <h2>Disk I/O</h2>
+      <div class="canvas-wrap"><canvas id="c-disk" aria-label="Disk throughput"></canvas></div>
+    </section>
+    <section class="panel panel-donut">
+      <h2>Root filesystem</h2>
+      <div class="donut-wrap">
+        <div class="canvas-wrap donut"><canvas id="c-root" aria-label="Root disk used"></canvas></div>
+        <div id="root-pct" class="root-pct">—</div>
+      </div>
+    </section>
+  </main>
+
+  <script src="js/chart.umd.min.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
