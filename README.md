@@ -119,16 +119,16 @@ Other platforms:
 ## Releases
 
 Current release:
-- `v0.2.0`
+- `v0.3.0`
 
 Release artifacts:
-- `dist/lmonitor-v0.2.0-linux-amd64`
-- `dist/lmonitor-v0.2.0-linux-arm64`
-- `dist/lmonitor-v0.2.0-windows-amd64.exe`
+- `dist/lmonitor-v0.3.0-linux-amd64`
+- `dist/lmonitor-v0.3.0-linux-arm64`
+- `dist/lmonitor-v0.3.0-windows-amd64.exe`
 
 Release notes:
 - [CHANGELOG.md](CHANGELOG.md)
-- [docs/releases/v0.2.0.md](docs/releases/v0.2.0.md)
+- [docs/releases/v0.3.0.md](docs/releases/v0.3.0.md)
 
 ## Logging Behavior
 
