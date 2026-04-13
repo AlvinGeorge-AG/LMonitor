@@ -576,12 +576,64 @@
     }, 50);
   }
 
-  function classifyLogLine(line) {
-    const upper = line.toUpperCase();
-    if (upper.indexOf("ERROR") >= 0 || upper.indexOf("FATAL") >= 0) return "error";
-    if (upper.indexOf("WARN") >= 0) return "warn";
-    if (upper.indexOf("DEBUG") >= 0) return "debug";
-    return "info";
+  function normalizeLogLevel(level) {
+    switch (String(level || "").toLowerCase()) {
+      case "high":
+      case "fatal":
+      case "panic":
+      case "critical":
+      case "crit":
+      case "alert":
+      case "emerg":
+      case "emergency":
+        return "high";
+      case "error":
+      case "err":
+        return "error";
+      case "warn":
+      case "warning":
+        return "warning";
+      case "debug":
+      case "trace":
+        return "debug";
+      case "good":
+      case "info":
+      case "notice":
+        return "good";
+      default:
+        return "";
+    }
+  }
+
+  function classifyLogTextLevel(line) {
+    const upper = String(line || "").toUpperCase();
+    if (
+      upper.indexOf("FATAL") >= 0 ||
+      upper.indexOf("PANIC") >= 0 ||
+      upper.indexOf("CRITICAL") >= 0 ||
+      upper.indexOf("EMERG") >= 0
+    ) {
+      return "high";
+    }
+    if (upper.indexOf("ERROR") >= 0) return "error";
+    if (upper.indexOf("WARN") >= 0) return "warning";
+    if (upper.indexOf("DEBUG") >= 0 || upper.indexOf("TRACE") >= 0) return "debug";
+    return "good";
+  }
+
+  function logLevelLabel(level) {
+    switch (normalizeLogLevel(level)) {
+      case "high":
+        return "HIGH";
+      case "error":
+        return "ERROR";
+      case "warning":
+        return "WARN";
+      case "debug":
+        return "DEBUG";
+      default:
+        return "GOOD";
+    }
   }
 
   function wireSelect(panel, sel, chart, defs) {
@@ -620,6 +672,7 @@
   let logWsBackoff = 1000;
   const logWsMaxBackoff = 30000;
   const logRows = [];
+  let logFilter = "all";
 
   const elStripUptime = document.getElementById("val-uptime");
   const elStripNcpu = document.getElementById("val-ncpu");
@@ -629,6 +682,7 @@
   const elRootPct = document.getElementById("root-pct");
   const elLogView = document.getElementById("log-view");
   let elLogEmpty = document.getElementById("log-empty");
+  const elLogFilter = document.getElementById("log-filter");
   const elLogClear = document.getElementById("log-clear");
 
   const cpuChart = new RollingChart(
@@ -972,24 +1026,133 @@
     return elLogView.scrollTop + elLogView.clientHeight >= elLogView.scrollHeight - 24;
   }
 
-  function appendLogLine(line) {
-    if (line == null) return;
-    const text = String(line);
-    if (!text) return;
+  function ensureLogEmpty(text) {
+    if (!elLogEmpty) {
+      elLogEmpty = document.createElement("div");
+      elLogEmpty.id = "log-empty";
+      elLogEmpty.className = "log-empty";
+      elLogView.appendChild(elLogEmpty);
+    }
+    elLogEmpty.textContent = text;
+  }
+
+  function syncLogEmptyState() {
+    let visible = 0;
+    for (let i = 0; i < logRows.length; i++) {
+      if (!logRows[i].el.hidden) visible++;
+    }
+    if (visible > 0) {
+      if (elLogEmpty) {
+        elLogEmpty.remove();
+        elLogEmpty = null;
+      }
+      return;
+    }
+    if (!logRows.length) {
+      ensureLogEmpty("Waiting for log output…");
+      return;
+    }
+    if (logFilter === "all") {
+      ensureLogEmpty("Waiting for log output…");
+      return;
+    }
+    ensureLogEmpty("No " + logLevelLabel(logFilter).toLowerCase() + " logs in view.");
+  }
+
+  function normalizeLogEntry(entry) {
+    if (entry == null) return null;
+    if (typeof entry !== "object") {
+      entry = { message: String(entry) };
+    }
+    const message =
+      entry.message != null
+        ? String(entry.message)
+        : entry.raw != null
+          ? String(entry.raw)
+          : "";
+    if (!message) return null;
+    const parsedTime = Number(entry.t);
+    const level =
+      normalizeLogLevel(entry.level || entry.severity) || classifyLogTextLevel(message);
+    const origin = String(entry.origin || (entry.source === "lmonitor" ? "app" : "system"))
+      .toLowerCase() === "app"
+      ? "app"
+      : "system";
+    return {
+      t: Number.isFinite(parsedTime) && parsedTime > 0 ? parsedTime : Date.now(),
+      level: level,
+      origin: origin,
+      source: entry.source ? String(entry.source) : origin === "app" ? "lmonitor" : "system",
+      unit: entry.unit ? String(entry.unit) : "",
+      host: entry.host ? String(entry.host) : "",
+      pid: entry.pid ? String(entry.pid) : "",
+      message: message,
+    };
+  }
+
+  function applyLogFilter() {
+    for (let i = 0; i < logRows.length; i++) {
+      const row = logRows[i];
+      row.el.hidden = logFilter !== "all" && row.entry.level !== logFilter;
+    }
+    syncLogEmptyState();
+  }
+
+  function appendLogEntry(data) {
+    const entry = normalizeLogEntry(data);
+    if (!entry) return;
+
     const stickToBottom = logNearBottom();
-    if (elLogEmpty) {
-      elLogEmpty.remove();
-      elLogEmpty = null;
-    }
     const row = document.createElement("div");
-    row.className = "log-line log-" + classifyLogLine(text);
-    row.textContent = text;
-    elLogView.appendChild(row);
-    logRows.push(row);
-    while (logRows.length > 200) {
-      const old = logRows.shift();
-      if (old) old.remove();
+    row.className = "log-line log-" + entry.level;
+
+    const meta = document.createElement("div");
+    meta.className = "log-meta";
+
+    const time = document.createElement("span");
+    time.className = "log-time";
+    time.textContent = timeLabel(entry.t);
+    meta.appendChild(time);
+
+    const level = document.createElement("span");
+    level.className = "log-pill log-level";
+    level.textContent = logLevelLabel(entry.level);
+    meta.appendChild(level);
+
+    const origin = document.createElement("span");
+    origin.className =
+      "log-pill " + (entry.origin === "app" ? "log-origin-app" : "log-origin-system");
+    origin.textContent = entry.origin === "app" ? "APP" : "SYSTEM";
+    meta.appendChild(origin);
+
+    const source = document.createElement("span");
+    source.className = "log-pill log-source";
+    source.textContent = entry.source;
+    meta.appendChild(source);
+
+    if (entry.unit && entry.unit !== entry.source) {
+      const unit = document.createElement("span");
+      unit.className = "log-pill log-unit";
+      unit.textContent = entry.unit;
+      meta.appendChild(unit);
     }
+
+    const message = document.createElement("div");
+    message.className = "log-message";
+    message.textContent = entry.message;
+
+    row.appendChild(meta);
+    row.appendChild(message);
+    elLogView.appendChild(row);
+
+    logRows.push({ el: row, entry: entry });
+    while (logRows.length > 400) {
+      const old = logRows.shift();
+      if (old && old.el) old.el.remove();
+    }
+
+    row.hidden = logFilter !== "all" && entry.level !== logFilter;
+    syncLogEmptyState();
     if (stickToBottom) {
       elLogView.scrollTop = elLogView.scrollHeight;
     }
@@ -998,12 +1161,14 @@
   function resetLogs() {
     logRows.length = 0;
     elLogView.innerHTML = "";
-    const empty = document.createElement("div");
-    empty.id = "log-empty";
-    empty.className = "log-empty";
-    empty.textContent = "Waiting for log output…";
-    elLogView.appendChild(empty);
-    elLogEmpty = empty;
+    syncLogEmptyState();
+  }
+
+  if (elLogFilter) {
+    elLogFilter.addEventListener("change", function () {
+      logFilter = elLogFilter.value || "all";
+      applyLogFilter();
+    });
   }
 
   if (elLogClear) {
@@ -1111,13 +1276,21 @@
       ws.close();
     };
     ws.onmessage = function (ev) {
-      appendLogLine(String(ev.data));
+      try {
+        appendLogEntry(JSON.parse(ev.data));
+      } catch (_) {
+        appendLogEntry({ message: String(ev.data), origin: "app", source: "lmonitor" });
+      }
     };
   }
 
   document.querySelectorAll("select.chart-type").forEach(function (sel) {
     sel.value = getPref("chart." + sel.getAttribute("data-panel"), sel.value);
   });
+
+  if (elLogFilter) {
+    elLogFilter.value = logFilter;
+  }
 
   connect();
   connectLogs();

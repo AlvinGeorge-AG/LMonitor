@@ -149,9 +149,17 @@
       <div class="panel-head">
         <div class="panel-title-block">
           <h2>System logs</h2>
-          <p class="panel-pct-line">Live, timestamped output from the monitor process.</p>
+          <p class="panel-pct-line">Live journal entries plus LMonitor logs that this process can read.</p>
         </div>
         <div class="panel-tools">
+          <select id="log-filter" class="log-filter" title="Log filter" aria-label="Log filter">
+            <option value="all">All levels</option>
+            <option value="high">High</option>
+            <option value="error">Error</option>
+            <option value="warning">Warning</option>
+            <option value="good">Good / Info</option>
+            <option value="debug">Debug</option>
+          </select>
           <button id="log-clear" class="log-clear" type="button">Clear</button>
         </div>
       </div>

@@ -53,6 +53,7 @@ func main() {
 	mux.Handle("/logs", logHub.Handler())
 
 	go server.RunPoller(col, hub, *interval, nil)
+	server.StartSystemLogCollector(logHub)
 
 	log.Printf("INFO LMonitor listening on http://%s", *addr)
 	if err := http.ListenAndServe(*addr, mux); err != nil {

@@ -5,6 +5,7 @@
   --text: #e6edf3;
   --muted: #8b949e;
   --accent: #58a6ff;
+  --high: #ff7b72;
   --good: #3fb950;
   --warn: #d29922;
   --bad: #f85149;
@@ -189,7 +190,8 @@ body {
   flex-shrink: 0;
 }
 
-.panel-tools select.chart-type {
+.panel-tools select.chart-type,
+.panel-tools select.log-filter {
   font-size: 0.7rem;
   padding: 0.2rem 0.35rem;
   border-radius: 6px;
@@ -311,8 +313,12 @@ body {
 }
 
 .log-line {
-  white-space: pre-wrap;
-  word-break: break-word;
+  display: grid;
+  gap: 0.3rem;
+  padding: 0.45rem 0.5rem;
+  border-radius: 7px;
+  border: 1px solid rgba(48, 54, 61, 0.7);
+  background: rgba(17, 24, 33, 0.72);
   color: #c9d1d9;
 }
 
@@ -320,24 +326,104 @@ body {
   margin-top: 0.3rem;
 }
 
-.log-line.log-info {
+.log-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.log-time {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.log-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.12rem 0.38rem;
+  border-radius: 999px;
+  border: 1px solid rgba(48, 54, 61, 0.9);
+  background: rgba(33, 38, 45, 0.9);
+  color: var(--text);
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.log-origin-system {
+  color: #79c0ff;
+}
+
+.log-origin-app {
   color: #c9d1d9;
 }
 
-.log-line.log-debug {
-  color: var(--muted);
+.log-source {
+  color: #8b949e;
+  text-transform: none;
+  letter-spacing: 0;
 }
 
-.log-line.log-warn {
-  color: var(--warn);
+.log-unit {
+  color: #a371f7;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.log-message {
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: #dce4ec;
+}
+
+.log-line.log-high {
+  border-color: rgba(248, 81, 73, 0.45);
+  background: linear-gradient(180deg, rgba(52, 18, 22, 0.9), rgba(24, 11, 14, 0.92));
+}
+
+.log-line.log-high .log-level {
+  color: var(--high);
 }
 
 .log-line.log-error {
+  border-color: rgba(248, 81, 73, 0.32);
+}
+
+.log-line.log-error .log-level {
   color: var(--bad);
+}
+
+.log-line.log-warning {
+  border-color: rgba(210, 153, 34, 0.32);
+}
+
+.log-line.log-warning .log-level {
+  color: var(--warn);
+}
+
+.log-line.log-good {
+  border-color: rgba(63, 185, 80, 0.25);
+}
+
+.log-line.log-good .log-level {
+  color: var(--good);
+}
+
+.log-line.log-debug {
+  border-color: rgba(110, 118, 129, 0.28);
+}
+
+.log-line.log-debug .log-level,
+.log-line.log-debug .log-message {
+  color: var(--muted);
 }
 
 .log-empty {
   color: var(--muted);
+  padding: 0.15rem 0;
 }
 
 @media (max-width: 1100px) {

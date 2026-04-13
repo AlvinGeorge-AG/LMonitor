@@ -132,9 +132,9 @@ Release notes:
 
 ## Logging Behavior
 
-- Dashboard log panel shows log lines from the monitor process.
-- It is not currently tailing system journals like `journalctl`.
-- Depending on current logger config, logs may also appear in terminal.
+- Dashboard log panel shows structured log entries from the monitor process and, on Linux, live `journalctl` output the current user can access.
+- Log rows are categorized into `high`, `error`, `warning`, `good/info`, and `debug`.
+- Depending on current logger config, monitor logs may also appear in terminal.
 
 ## Stop Running Instances
 
