@@ -1,0 +1,34 @@
+{
+  "name": "lmonitor-widget",
+  "version": "0.1.0",
+  "description": "LMonitor floating desktop widget",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build:linux": "electron-builder --linux AppImage deb",
+    "build:win": "electron-builder --win portable",
+    "build:mac": "electron-builder --mac"
+  },
+  "build": {
+    "appId": "com.lmonitor.widget",
+    "productName": "LMonitor Widget",
+    "files": ["main.js", "preload.js", "renderer/**/*"],
+    "linux": {
+      "target": ["AppImage", "deb"],
+      "category": "Utility"
+    },
+    "win": {
+      "target": "portable"
+    },
+    "mac": {
+      "target": "dmg"
+    }
+  },
+  "keywords": ["lmonitor", "system", "monitor", "widget"],
+  "author": "Ewan",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^31.0.0",
+    "electron-builder": "^24.0.0"
+  }
+}
