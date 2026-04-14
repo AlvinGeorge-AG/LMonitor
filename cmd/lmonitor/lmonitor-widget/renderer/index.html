@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>LMonitor Widget</title>
+<style>
+/* ── Reset ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* ── Design tokens ── */
+:root {
+  --bg: rgba(13, 17, 23, 0.92);
+  --panel: rgba(22, 27, 34, 0.88);
+  --border: rgba(48, 54, 61, 0.9);
+  --text: #e6edf3;
+  --muted: #8b949e;
+  --accent: #58a6ff;
+  --good: #3fb950;
+  --warn: #d29922;
+  --bad:  #f85149;
+  --high: #ff7b72;
+  --rx:   #3fb950;
+  --tx:   #a371f7;
+  --read: #79c0ff;
+  --write:#ffa657;
+  --radius: 10px;
+  --titlebar-h: 36px;
+  --panel-chart-h: 140px;
+}
+
+/* ── Root ── */
+html, body {
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+  color: var(--text);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, sans-serif;
+  font-size: 11px;
+  user-select: none;
+}
+
+/* ── Outer shell ── */
+#shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+
+/* ── Titlebar (draggable) ── */
+#titlebar {
+  -webkit-app-region: drag;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: var(--titlebar-h);
+  padding: 0 10px;
+  background: rgba(22, 27, 34, 0.95);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.brand {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.brand-name {
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: var(--text);
+}
+.brand-sub {
+  font-size: 9px;
+  color: var(--muted);
+}
+
+.titlebar-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  -webkit-app-region: no-drag;
+}
+
+#status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--warn);
+  transition: background 0.3s;
+}
+#status-dot.live { background: var(--good); }
+
+.tb-btn {
+  -webkit-app-region: no-drag;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
+}
+.tb-btn:hover { background: rgba(88,166,255,.15); color: var(--text); }
+.tb-btn.danger:hover { background: rgba(248,81,73,.18); color: var(--bad); }
+
+/* ── Strip ── */
+#strip {
+  display: flex;
+  gap: 4px;
+  padding: 5px 8px;
+  background: rgba(13,17,23,.6);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+#strip::-webkit-scrollbar { display: none; }
+
+.pill {
+  font-size: 9px;
+  padding: 2px 6px;
+  border-radius: 5px;
+  background: rgba(33,38,45,.9);
+  border: 1px solid var(--border);
+  white-space: nowrap;
+  color: var(--text);
+}
+.pill-k { color: var(--muted); margin-right: 3px; }
+
+/* ── Scrollable content ── */
+#content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(48,54,61,.8) transparent;
+}
+#content::-webkit-scrollbar { width: 4px; }
+#content::-webkit-scrollbar-track { background: transparent; }
+#content::-webkit-scrollbar-thumb { background: rgba(48,54,61,.8); border-radius: 4px; }
+
+/* ── Panel card ── */
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 9px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 4px;
+}
+.panel-title { font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.panel-sub { font-size: 9px; color: var(--text); opacity: .85; font-variant-numeric: tabular-nums; margin-top: 1px; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+
+.panel-tools { display: flex; align-items: center; gap: 3px; flex-shrink: 0; }
+.panel-tools select {
+  font-size: 8px;
+  padding: 1px 3px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: rgba(13,17,23,.9);
+  color: var(--text);
+  max-width: 58px;
+  cursor: pointer;
+}
+
+/* ── Chart wrap ── */
+.chart-wrap {
+  position: relative;
+  height: var(--panel-chart-h);
+  width: 100%;
+}
+.chart-wrap canvas { display: block; }
+
+/* ── Donut panel ── */
+.donut-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.donut-wrap {
+  position: relative;
+  flex: 1;
+  height: 100px;
+}
+.root-pct {
+  font-size: 18px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+  line-height: 1.2;
+}
+.root-pct small { display: block; font-size: 8px; font-weight: 400; color: var(--muted); margin-top: 2px; }
+
+/* ── Log panel ── */
+.log-view {
+  height: 130px;
+  overflow-y: auto;
+  background: rgba(9,12,18,.9);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 7px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 9px;
+  line-height: 1.4;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(48,54,61,.8) transparent;
+}
+.log-view::-webkit-scrollbar { width: 3px; }
+.log-view::-webkit-scrollbar-thumb { background: rgba(48,54,61,.8); border-radius: 2px; }
+
+.log-line { display: grid; gap: 2px; padding: 3px 4px; border-radius: 4px; border: 1px solid rgba(48,54,61,.6); background: rgba(17,24,33,.7); color: #c9d1d9; }
+.log-line + .log-line { margin-top: 3px; }
+.log-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 3px; }
+.log-time { color: var(--muted); font-variant-numeric: tabular-nums; }
+.log-pill { display: inline-flex; padding: 1px 4px; border-radius: 999px; border: 1px solid rgba(48,54,61,.9); background: rgba(33,38,45,.9); font-size: 7.5px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; }
+.log-origin-app  { color: #c9d1d9; }
+.log-origin-system { color: #79c0ff; }
+.log-source { color: #8b949e; text-transform: none; letter-spacing: 0; }
+.log-message { white-space: pre-wrap; word-break: break-word; color: #dce4ec; }
+.log-line.log-high   { border-color: rgba(248,81,73,.4); background: rgba(52,18,22,.9); }
+.log-line.log-high   .log-level { color: var(--high); }
+.log-line.log-error  .log-level { color: var(--bad); }
+.log-line.log-warning .log-level { color: var(--warn); }
+.log-line.log-good   .log-level { color: var(--good); }
+.log-line.log-debug  .log-level, .log-line.log-debug .log-message { color: var(--muted); }
+.log-empty { color: var(--muted); padding: 2px 0; }
+
+/* ── Settings overlay ── */
+#settings-overlay {
+  display: none;
+  position: absolute;
+  inset: 0;
+  background: rgba(13,17,23,.97);
+  border-radius: var(--radius);
+  z-index: 100;
+  padding: 16px 14px;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+}
+#settings-overlay.open { display: flex; }
+#settings-overlay h3 { font-size: 11px; font-weight: 600; color: var(--text); letter-spacing: .04em; text-transform: uppercase; }
+.setting-row { display: flex; flex-direction: column; gap: 4px; }
+.setting-row label { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+.setting-row input[type=text],
+.setting-row input[type=number] {
+  background: rgba(22,27,34,.95);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text);
+  font-size: 11px;
+  padding: 5px 8px;
+  width: 100%;
+  outline: none;
+}
+.setting-row input:focus { border-color: var(--accent); }
+.setting-row input[type=range] { width: 100%; accent-color: var(--accent); }
+.setting-row .row-inline { display: flex; align-items: center; gap: 8px; }
+.setting-row .row-inline span { font-size: 10px; color: var(--text); min-width: 28px; }
+.settings-footer { display: flex; gap: 6px; margin-top: 4px; }
+.btn {
+  flex: 1;
+  padding: 6px 0;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: rgba(22,27,34,.9);
+  color: var(--text);
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .15s;
+}
+.btn:hover { background: rgba(88,166,255,.18); border-color: rgba(88,166,255,.5); }
+.btn.primary { background: rgba(88,166,255,.2); border-color: rgba(88,166,255,.6); color: var(--accent); }
+.btn.primary:hover { background: rgba(88,166,255,.32); }
+</style>
+</head>
+<body>
+<div id="shell">
+
+  <!-- Titlebar -->
+  <div id="titlebar">
+    <div class="brand">
+      <span class="brand-name">LMonitor</span>
+      <span class="brand-sub">widget</span>
+    </div>
+    <div class="titlebar-right">
+      <div id="status-dot" title="Disconnected"></div>
+      <button class="tb-btn" id="btn-settings" title="Settings">⚙</button>
+      <button class="tb-btn" id="btn-minimize" title="Minimize">−</button>
+      <button class="tb-btn danger" id="btn-close" title="Hide">✕</button>
+    </div>
+  </div>
+
+  <!-- Strip -->
+  <div id="strip">
+    <span class="pill"><span class="pill-k">Uptime</span><span id="val-uptime">—</span></span>
+    <span class="pill"><span class="pill-k">CPUs</span><span id="val-ncpu">—</span></span>
+    <span class="pill"><span class="pill-k">Tasks</span><span id="val-procs">—</span></span>
+    <span class="pill"><span class="pill-k">Load</span><span id="val-loadpct">—</span></span>
+  </div>
+
+  <!-- Scrollable panels -->
+  <div id="content">
+
+    <!-- CPU & I/O Wait -->
+    <div class="panel">
+      <div class="panel-head">
+        <div style="min-width:0">
+          <div class="panel-title">CPU &amp; I/O Wait</div>
+          <div class="panel-sub" id="sub-cpu"></div>
+        </div>
+        <div class="panel-tools">
+          <select id="sel-cpu"><option value="line">Line</option><option value="area">Area</option><option value="bar">Bar</option></select>
+        </div>
+      </div>
+      <div class="chart-wrap"><canvas id="c-cpu"></canvas></div>
+    </div>
+
+    <!-- Memory -->
+    <div class="panel">
+      <div class="panel-head">
+        <div style="min-width:0">
+          <div class="panel-title">Memory</div>
+          <div class="panel-sub" id="sub-mem"></div>
+        </div>
+        <div class="panel-tools">
+          <select id="sel-mem"><option value="line">Line</option><option value="area">Area</option><option value="bar">Bar</option></select>
+        </div>
+      </div>
+      <div class="chart-wrap"><canvas id="c-mem"></canvas></div>
+    </div>
+
+    <!-- Load Average -->
+    <div class="panel">
+      <div class="panel-head">
+        <div style="min-width:0">
+          <div class="panel-title">Load Average</div>
+          <div class="panel-sub" id="sub-load"></div>
+        </div>
+        <div class="panel-tools">
+          <select id="sel-load"><option value="line">Line</option><option value="area">Area</option><option value="bar">Bar</option></select>
+        </div>
+      </div>
+      <div class="chart-wrap"><canvas id="c-load"></canvas></div>
+    </div>
+
+    <!-- Network -->
+    <div class="panel">
+      <div class="panel-head">
+        <div style="min-width:0">
+          <div class="panel-title">Network</div>
+          <div class="panel-sub" id="sub-net"></div>
+        </div>
+        <div class="panel-tools">
+          <select id="sel-net"><option value="line">Line</option><option value="area">Area</option><option value="bar">Bar</option></select>
+        </div>
+      </div>
+      <div class="chart-wrap"><canvas id="c-net"></canvas></div>
+    </div>
+
+    <!-- Disk I/O -->
+    <div class="panel">
+      <div class="panel-head">
+        <div style="min-width:0">
+          <div class="panel-title">Disk I/O</div>
+          <div class="panel-sub" id="sub-disk"></div>
+        </div>
+        <div class="panel-tools">
+          <select id="sel-disk"><option value="line">Line</option><option value="area">Area</option><option value="bar">Bar</option></select>
+        </div>
+      </div>
+      <div class="chart-wrap"><canvas id="c-disk"></canvas></div>
+    </div>
+
+    <!-- Per-Core CPU -->
+    <div class="panel">
+      <div class="panel-head">
+        <div style="min-width:0">
+          <div class="panel-title">Per-Core CPU</div>
+          <div class="panel-sub" id="sub-cores"></div>
+        </div>
+        <div class="panel-tools">
+          <select id="sel-cores"><option value="area">Area</option><option value="line">Line</option><option value="bar">Bar (now)</option><option value="radar">Radar</option></select>
+        </div>
+      </div>
+      <div class="chart-wrap"><canvas id="c-cores"></canvas></div>
+    </div>
+
+    <!-- Running Tasks -->
+    <div class="panel">
+      <div class="panel-head">
+        <div style="min-width:0">
+          <div class="panel-title">Running Tasks</div>
+          <div class="panel-sub" id="sub-procs"></div>
+        </div>
+        <div class="panel-tools">
+          <select id="sel-procs"><option value="line">Line</option><option value="area">Area</option><option value="bar">Bar</option></select>
+        </div>
+      </div>
+      <div class="chart-wrap"><canvas id="c-procs"></canvas></div>
+    </div>
+
+    <!-- Root Filesystem -->
+    <div class="panel">
+      <div class="panel-head">
+        <div style="min-width:0">
+          <div class="panel-title">Root Filesystem</div>
+          <div class="panel-sub" id="sub-root"></div>
+        </div>
+        <div class="panel-tools">
+          <select id="sel-root"><option value="doughnut">Doughnut</option><option value="pie">Pie</option><option value="polarArea">Polar</option><option value="bar">Bar</option></select>
+        </div>
+      </div>
+      <div class="donut-row">
+        <div class="donut-wrap"><canvas id="c-root"></canvas></div>
+        <div id="root-pct" class="root-pct">—</div>
+      </div>
+    </div>
+
+    <!-- System Logs -->
+    <div class="panel">
+      <div class="panel-head">
+        <div style="min-width:0">
+          <div class="panel-title">System Logs</div>
+          <div class="panel-sub">Live journal + LMonitor logs</div>
+        </div>
+        <div class="panel-tools">
+          <select id="log-filter">
+            <option value="all">All</option>
+            <option value="high">High</option>
+            <option value="error">Error</option>
+            <option value="warning">Warn</option>
+            <option value="good">Info</option>
+            <option value="debug">Debug</option>
+          </select>
+          <button class="tb-btn" id="log-clear" title="Clear logs" style="font-size:9px">✕</button>
+        </div>
+      </div>
+      <div class="log-view" id="log-view">
+        <div class="log-empty" id="log-empty">Waiting for log output…</div>
+      </div>
+    </div>
+
+  </div><!-- /content -->
+
+  <!-- Settings overlay -->
+  <div id="settings-overlay">
+    <h3>Widget Settings</h3>
+    <div class="setting-row">
+      <label>LMonitor Host</label>
+      <input type="text" id="s-host" placeholder="localhost" />
+    </div>
+    <div class="setting-row">
+      <label>Port</label>
+      <input type="number" id="s-port" placeholder="43000" min="1" max="65535" />
+    </div>
+    <div class="setting-row">
+      <label>Opacity</label>
+      <div class="row-inline">
+        <input type="range" id="s-opacity" min="0.3" max="1" step="0.05" />
+        <span id="s-opacity-val">0.92</span>
+      </div>
+    </div>
+    <div class="setting-row">
+      <label>Always on Top</label>
+      <div class="row-inline">
+        <input type="checkbox" id="s-aot" />
+        <span style="font-size:10px;color:var(--text)">Keep widget above other windows</span>
+      </div>
+    </div>
+    <div class="settings-footer">
+      <button class="btn" id="s-cancel">Cancel</button>
+      <button class="btn primary" id="s-save">Connect &amp; Save</button>
+    </div>
+  </div>
+
+</div><!-- /shell -->
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
