@@ -52,6 +52,8 @@ func main() {
 	mux.Handle("/ws", hub.Handler())
 	mux.Handle("/logs", logHub.Handler())
 
+	server.MountAPI(mux)
+
 	go server.RunPoller(col, hub, *interval, nil)
 	server.StartSystemLogCollector(logHub)
 

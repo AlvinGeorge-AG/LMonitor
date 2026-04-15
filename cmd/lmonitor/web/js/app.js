@@ -1292,6 +1292,143 @@
     elLogFilter.value = logFilter;
   }
 
+  // --- Theme ---
+  const elThemeToggle = document.getElementById("theme-toggle");
+  function applyTheme(light) {
+    if (light) {
+      document.documentElement.setAttribute("data-theme", "light");
+      Chart.defaults.color = "#59636e";
+      Chart.defaults.borderColor = "#d0d7de";
+    } else {
+      document.documentElement.removeAttribute("data-theme");
+      Chart.defaults.color = "#8b949e";
+      Chart.defaults.borderColor = "#30363d";
+    }
+  }
+  let isLight = getPref("theme", "dark") === "light";
+  applyTheme(isLight);
+  if (elThemeToggle) {
+    elThemeToggle.addEventListener("click", function() {
+      isLight = !isLight;
+      setPref("theme", isLight ? "light" : "dark");
+      applyTheme(isLight);
+      // Re-trigger layout if needed
+      window.dispatchEvent(new Event("resize"));
+    });
+  }
+
+  // --- Drag and Drop Layouts ---
+  const grid = document.querySelector(".grid");
+  const panels = Array.from(grid.querySelectorAll(".panel"));
+  
+  // Reorder on load
+  try {
+    const savedOrder = JSON.parse(getPref("layout", "[]"));
+    if (savedOrder && savedOrder.length) {
+      savedOrder.forEach(function(panelKey) {
+        const el = grid.querySelector('.panel[data-panel="' + panelKey + '"]');
+        if (el) grid.appendChild(el);
+      });
+    }
+  } catch(e) {}
+
+  let draggedEl = null;
+
+  panels.forEach(function(p) {
+    p.addEventListener("dragstart", function(e) {
+      draggedEl = p;
+      e.dataTransfer.effectAllowed = "move";
+      setTimeout(function() { p.classList.add("is-dragging"); }, 0);
+    });
+    p.addEventListener("dragend", function(e) {
+      p.classList.remove("is-dragging");
+      draggedEl = null;
+      panels.forEach(function(x) { x.classList.remove("drop-target"); });
+      
+      // Save order
+      const newOrder = Array.from(grid.querySelectorAll(".panel")).map(function(el) {
+        return el.getAttribute("data-panel");
+      }).filter(Boolean);
+      setPref("layout", JSON.stringify(newOrder));
+    });
+    p.addEventListener("dragover", function(e) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+    });
+    p.addEventListener("dragenter", function(e) {
+      e.preventDefault();
+      if (p !== draggedEl) p.classList.add("drop-target");
+    });
+    p.addEventListener("dragleave", function(e) {
+      p.classList.remove("drop-target");
+    });
+    p.addEventListener("drop", function(e) {
+      e.preventDefault();
+      p.classList.remove("drop-target");
+      if (draggedEl && draggedEl !== p) {
+        const all = Array.from(grid.querySelectorAll(".panel"));
+        const idxD = all.indexOf(draggedEl);
+        const idxP = all.indexOf(p);
+        if (idxD < idxP) {
+          p.after(draggedEl);
+        } else {
+          p.before(draggedEl);
+        }
+      }
+    });
+  });
+
+  // --- Process Manager ---
+  const elProcRefresh = document.getElementById("proc-refresh");
+  const elProcTbody = document.getElementById("proc-tbody");
+  
+  function fetchProcesses() {
+    if (!elProcTbody) return;
+    fetch("/api/processes")
+      .then(function(res) { return res.json(); })
+      .then(function(procs) {
+        elProcTbody.innerHTML = "";
+        procs.forEach(function(p) {
+          const tr = document.createElement("tr");
+          tr.innerHTML = 
+            "<td>" + window.escapeHtml(String(p.pid)) + "</td>" +
+            "<td style='min-width:120px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;'>" + window.escapeHtml(p.name) + "</td>" +
+            "<td>" + window.escapeHtml(p.user || "-") + "</td>" +
+            "<td style='text-align:right'>" + p.cpu.toFixed(1) + "%</td>" +
+            "<td style='text-align:right'>" + p.mem.toFixed(1) + "%</td>" +
+            "<td style='text-align:right'><button class='btn-kill' data-pid='" + p.pid + "'>Kill</button></td>";
+          elProcTbody.appendChild(tr);
+        });
+
+        // Bind kill buttons
+        elProcTbody.querySelectorAll(".btn-kill").forEach(function(btn) {
+          btn.addEventListener("click", function() {
+            const pid = btn.getAttribute("data-pid");
+            if (confirm("Are you sure you want to kill process " + pid + "?")) {
+              fetch("/api/process/" + pid + "/kill", { method: "POST" })
+                .then(function(res) {
+                  if (!res.ok) alert("Kill failed: " + res.statusText);
+                  fetchProcesses();
+                });
+            }
+          });
+        });
+      })
+      .catch(function(e) { console.error("Proc API err:", e); });
+  }
+
+  // Simple escaping
+  window.escapeHtml = function(unsafe) {
+    return (unsafe || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  };
+
+  if (elProcRefresh) {
+    elProcRefresh.addEventListener("click", fetchProcesses);
+  }
+  // Initial fill and slow poll
+  fetchProcesses();
+  setInterval(fetchProcesses, 4000);
+
   connect();
   connectLogs();
 })();

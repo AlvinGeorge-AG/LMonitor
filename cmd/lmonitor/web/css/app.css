@@ -13,10 +13,37 @@
   --tx: #a371f7;
   --read: #79c0ff;
   --write: #ffa657;
-  /* Fixed card height: charts fill the remainder; rows no longer stretch to the tallest plot. */
+  --pill-bg: #21262d;
+  --head-bg: rgba(22, 27, 34, 0.95);
+  --log-view-bg: linear-gradient(180deg, rgba(13, 17, 23, 0.92), rgba(9, 12, 18, 0.98));
+  --log-line-bg: rgba(17, 24, 33, 0.72);
   --panel-h: 380px;
+  --drag-hint: #58a6ff;
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, sans-serif;
 }
+
+[data-theme="light"] {
+  --bg: #f6f8fa;
+  --panel: #ffffff;
+  --border: #d0d7de;
+  --text: #1F2328;
+  --muted: #59636e;
+  --accent: #0969da;
+  --high: #cf222e;
+  --good: #1a7f37;
+  --warn: #9a6700;
+  --bad: #d1242f;
+  --rx: #1a7f37;
+  --tx: #8250df;
+  --read: #0969da;
+  --write: #bf8700;
+  --pill-bg: #eaeef2;
+  --head-bg: rgba(255, 255, 255, 0.95);
+  --log-view-bg: #f6f8fa;
+  --log-line-bg: #ffffff;
+  --drag-hint: #0969da;
+}
+
 
 html {
   height: 100%;
@@ -56,7 +83,7 @@ body {
   flex-wrap: wrap;
   padding: 0.75rem 1.25rem;
   border-bottom: 1px solid var(--border);
-  background: rgba(22, 27, 34, 0.95);
+  background: var(--head-bg);
   position: sticky;
   top: 0;
   z-index: 10;
@@ -80,7 +107,7 @@ body {
   font-size: 0.7rem;
   padding: 0.25rem 0.5rem;
   border-radius: 6px;
-  background: #21262d;
+  background: var(--pill-bg);
   border: 1px solid var(--border);
   color: var(--text);
   white-space: nowrap;
@@ -196,7 +223,7 @@ body {
   padding: 0.2rem 0.35rem;
   border-radius: 6px;
   border: 1px solid var(--border);
-  background: #0d1117;
+  background: var(--bg);
   color: var(--text);
   max-width: 8.5rem;
 }
@@ -290,7 +317,7 @@ body {
   padding: 0.28rem 0.55rem;
   border-radius: 6px;
   border: 1px solid var(--border);
-  background: #0d1117;
+  background: var(--bg);
   cursor: pointer;
 }
 
@@ -304,7 +331,7 @@ body {
   padding: 0.7rem 0.75rem;
   border-radius: 8px;
   border: 1px solid var(--border);
-  background: linear-gradient(180deg, rgba(13, 17, 23, 0.92), rgba(9, 12, 18, 0.98));
+  background: var(--log-view-bg);
   overflow: auto;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   font-size: 0.72rem;
@@ -317,9 +344,9 @@ body {
   gap: 0.3rem;
   padding: 0.45rem 0.5rem;
   border-radius: 7px;
-  border: 1px solid rgba(48, 54, 61, 0.7);
-  background: rgba(17, 24, 33, 0.72);
-  color: #c9d1d9;
+  border: 1px solid var(--border);
+  background: var(--log-line-bg);
+  color: var(--text);
 }
 
 .log-line+.log-line {
@@ -447,3 +474,83 @@ body {
   color: var(--muted);
   margin-top: 0.25rem;
 }
+
+/* --- Process Table & Drag Drop --- */
+
+.panel-full {
+  grid-column: 1 / -1;
+  height: 400px;
+  max-height: 400px;
+}
+
+.grab-handle {
+  cursor: grab;
+  color: var(--muted);
+  padding: 0 0.5rem;
+  font-size: 1rem;
+  display: inline-flex;
+  align-items: center;
+  user-select: none;
+}
+.grab-handle:active {
+  cursor: grabbing;
+}
+
+.panel.is-dragging {
+  opacity: 0.4;
+  border: 2px dashed var(--drag-hint);
+}
+.panel.drop-target {
+  border: 2px solid var(--accent);
+}
+
+.proc-wrap {
+  flex: 1 1 0;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--log-view-bg);
+  scrollbar-width: thin;
+}
+
+.proc-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.75rem;
+  color: var(--text);
+  font-family: ui-monospace, monospace;
+}
+.proc-table th {
+  position: sticky;
+  top: 0;
+  background: var(--pill-bg);
+  text-align: left;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+}
+.proc-table td {
+  padding: 0.4rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+.proc-table tbody tr:hover {
+  background: var(--log-line-bg);
+}
+
+.btn-kill {
+  font-size: 0.65rem;
+  font-weight: bold;
+  padding: 0.2rem 0.4rem;
+  border-radius: 4px;
+  border: 1px solid var(--bad);
+  background: transparent;
+  color: var(--bad);
+  cursor: pointer;
+}
+.btn-kill:hover {
+  background: var(--bad);
+  color: #fff;
+}
+

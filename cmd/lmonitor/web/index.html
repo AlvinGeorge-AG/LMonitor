@@ -18,12 +18,16 @@
       <span class="pill"><span class="pill-k">Tasks</span> <span id="val-procs">—</span></span>
       <span class="pill"><span class="pill-k">Load</span> <span id="val-loadpct">—</span></span>
     </div>
-    <div id="status" class="status status-offline" role="status">Reconnecting…</div>
+    <div style="display:flex; gap:0.5rem; align-items:center;">
+      <button id="theme-toggle" class="log-clear" title="Toggle Theme" aria-label="Toggle Theme">🌙</button>
+      <div id="status" class="status status-offline" role="status">Reconnecting…</div>
+    </div>
   </header>
 
   <main class="grid">
-    <section class="panel" data-panel="cpu">
+    <section class="panel" data-panel="cpu" draggable="true">
       <div class="panel-head">
+        <span class="grab-handle" title="Drag to reorder">⋮⋮</span>
         <div class="panel-title-block">
           <h2>CPU &amp; I/O wait</h2>
           <p class="panel-pct-line" id="pct-cpu-line"></p>
@@ -37,8 +41,9 @@
       <div class="canvas-wrap"><canvas id="c-cpu"></canvas></div>
     </section>
 
-    <section class="panel" data-panel="mem">
+    <section class="panel" data-panel="mem" draggable="true">
       <div class="panel-head">
+        <span class="grab-handle" title="Drag to reorder">⋮⋮</span>
         <div class="panel-title-block">
           <h2>Memory</h2>
           <p class="panel-pct-line" id="pct-mem-line"></p>
@@ -52,8 +57,9 @@
       <div class="canvas-wrap"><canvas id="c-mem"></canvas></div>
     </section>
 
-    <section class="panel" data-panel="load">
+    <section class="panel" data-panel="load" draggable="true">
       <div class="panel-head">
+        <span class="grab-handle" title="Drag to reorder">⋮⋮</span>
         <div class="panel-title-block">
           <h2>Load average</h2>
           <p class="panel-pct-line" id="pct-load-line"></p>
@@ -67,8 +73,9 @@
       <div class="canvas-wrap"><canvas id="c-load"></canvas></div>
     </section>
 
-    <section class="panel" data-panel="net">
+    <section class="panel" data-panel="net" draggable="true">
       <div class="panel-head">
+        <span class="grab-handle" title="Drag to reorder">⋮⋮</span>
         <div class="panel-title-block">
           <h2>Network</h2>
           <p class="panel-pct-line" id="pct-net-line"></p>
@@ -82,8 +89,9 @@
       <div class="canvas-wrap"><canvas id="c-net"></canvas></div>
     </section>
 
-    <section class="panel" data-panel="disk">
+    <section class="panel" data-panel="disk" draggable="true">
       <div class="panel-head">
+        <span class="grab-handle" title="Drag to reorder">⋮⋮</span>
         <div class="panel-title-block">
           <h2>Disk I/O</h2>
           <p class="panel-pct-line" id="pct-disk-line"></p>
@@ -97,8 +105,9 @@
       <div class="canvas-wrap"><canvas id="c-disk"></canvas></div>
     </section>
 
-    <section class="panel" data-panel="cores">
+    <section class="panel" data-panel="cores" draggable="true">
       <div class="panel-head">
+        <span class="grab-handle" title="Drag to reorder">⋮⋮</span>
         <div class="panel-title-block">
           <h2>Per-core CPU</h2>
           <p class="panel-pct-line" id="pct-cores-line"></p>
@@ -112,8 +121,9 @@
       <div class="canvas-wrap"><canvas id="c-cores"></canvas></div>
     </section>
 
-    <section class="panel" data-panel="procs">
+    <section class="panel" data-panel="procs" draggable="true">
       <div class="panel-head">
+        <span class="grab-handle" title="Drag to reorder">⋮⋮</span>
         <div class="panel-title-block">
           <h2>Running tasks</h2>
           <p class="panel-pct-line" id="pct-procs-line"></p>
@@ -127,8 +137,9 @@
       <div class="canvas-wrap"><canvas id="c-procs"></canvas></div>
     </section>
 
-    <section class="panel panel-donut" data-panel="root">
+    <section class="panel panel-donut" data-panel="root" draggable="true">
       <div class="panel-head">
+        <span class="grab-handle" title="Drag to reorder">⋮⋮</span>
         <div class="panel-title-block">
           <h2>Root filesystem</h2>
           <p class="panel-pct-line" id="pct-root-line"></p>
@@ -145,8 +156,39 @@
       </div>
     </section>
 
-    <section class="panel panel-log" data-panel="logs">
+    <section class="panel panel-full" data-panel="proc-manager" draggable="true">
       <div class="panel-head">
+        <span class="grab-handle" title="Drag to reorder">⋮⋮</span>
+        <div class="panel-title-block">
+          <h2>Top Processes</h2>
+          <p class="panel-pct-line">Top resource-consuming processes on this host.</p>
+        </div>
+        <div class="panel-tools">
+          <button id="proc-refresh" class="log-clear" type="button">Refresh</button>
+        </div>
+      </div>
+      <div class="proc-wrap" id="proc-wrap">
+        <table class="proc-table">
+          <thead>
+            <tr>
+              <th>PID</th>
+              <th>Name</th>
+              <th>User</th>
+              <th style="text-align:right;">CPU %</th>
+              <th style="text-align:right;">RAM %</th>
+              <th style="width:40px;"></th>
+            </tr>
+          </thead>
+          <tbody id="proc-tbody">
+            <tr><td colspan="6" style="text-align:center; padding:1rem; color:var(--muted);">Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel panel-log" data-panel="logs" draggable="true">
+      <div class="panel-head">
+        <span class="grab-handle" title="Drag to reorder">⋮⋮</span>
         <div class="panel-title-block">
           <h2>System logs</h2>
           <p class="panel-pct-line">Live journal entries plus LMonitor logs that this process can read.</p>
